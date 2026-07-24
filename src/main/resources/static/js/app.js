@@ -369,13 +369,15 @@ function renderCaptainPortal() {
             <div class="route-card">
                 <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📍 Publish Inter-City Route</h2>
                 <form id="captain-publish-form">
-                    <div class="form-group" style="margin-bottom:14px;">
+                    <div class="form-group" style="margin-bottom:14px; position:relative;">
                         <label class="form-label">Origin City</label>
-                        <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" required />
+                        <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" autocomplete="off" required />
+                        <div id="pub-origin-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                     </div>
-                    <div class="form-group" style="margin-bottom:14px;">
+                    <div class="form-group" style="margin-bottom:14px; position:relative;">
                         <label class="form-label">Destination City</label>
-                        <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" required />
+                        <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" autocomplete="off" required />
+                        <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
                         <div class="form-group">
@@ -1421,6 +1423,8 @@ function bindPostRenderListeners() {
                 showToast('Network error publishing trip', 'error');
             }
         });
+        setupSimpleAutocomplete('pub-origin', 'pub-origin-suggestions');
+        setupSimpleAutocomplete('pub-dest', 'pub-dest-suggestions');
     }
 
     // Captain GPS Broadcast Listener
@@ -3988,6 +3992,61 @@ function setupLocalTaxiAutocomplete(inputId, suggestionsId, latId, lngId, marker
                 console.log(`[local-taxi-autocomplete] suggestions box visible (display = block)`);
             } catch (err) {
                 console.error("[local-taxi-autocomplete] fetch catch error: ", err);
+            }
+        }, 500);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (e.target !== input && e.target !== suggestionsBox) {
+            suggestionsBox.style.display = 'none';
+        }
+    });
+}
+
+function setupSimpleAutocomplete(inputId, suggestionsId) {
+    const input = document.getElementById(inputId);
+    const suggestionsBox = document.getElementById(suggestionsId);
+    if (!input || !suggestionsBox) return;
+
+    let debounceTimeout = null;
+
+    input.addEventListener('input', function() {
+        if (debounceTimeout) clearTimeout(debounceTimeout);
+        const query = input.value.trim();
+        if (query.length < 3) {
+            suggestionsBox.style.display = 'none';
+            return;
+        }
+
+        debounceTimeout = setTimeout(async () => {
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=in`, {
+                    headers: { 'Accept-Language': 'en' }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                
+                suggestionsBox.innerHTML = '';
+                if (data.length === 0) {
+                    suggestionsBox.style.display = 'none';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const div = document.createElement('div');
+                    div.style.cssText = 'padding:10px 14px; cursor:pointer; font-size:12px; border-bottom:1px solid var(--border); color:var(--text-white); background:var(--bg-surface);';
+                    div.textContent = item.display_name;
+                    div.addEventListener('click', function() {
+                        const parts = item.display_name.split(',');
+                        const cityName = parts[0].trim();
+                        input.value = cityName;
+                        suggestionsBox.style.display = 'none';
+                    });
+                    suggestionsBox.appendChild(div);
+                });
+                suggestionsBox.style.display = 'block';
+            } catch (err) {
+                console.error(err);
             }
         }, 500);
     });
