@@ -980,3 +980,268 @@ body {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.4; transform: scale(0.7); }
 }
+
+/* ==========================================================================
+   MOBILE & RESPONSIVE LAYOUT SYSTEM
+   ========================================================================== */
+
+/* Breakpoint for Tablets and Small Laptops (under 768px) */
+@media (max-width: 768px) {
+    /* Navigation Bar collapsing/stacking */
+    .navbar {
+        height: auto;
+        padding: 16px;
+        flex-direction: column;
+        gap: 16px;
+        align-items: center;
+    }
+    
+    .nav-left {
+        flex-direction: column;
+        gap: 12px;
+        width: 100%;
+        align-items: center;
+    }
+    
+    .nav-links {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    
+    .nav-link {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+    
+    .nav-right {
+        justify-content: center;
+        width: 100%;
+        margin-top: 4px;
+        gap: 12px;
+    }
+    
+    .user-profile-btn {
+        padding: 6px 12px;
+    }
+    
+    /* Main Layout container spacing */
+    .main-wrapper {
+        margin: 16px auto;
+        padding: 0 16px;
+    }
+    
+    /* Hero / Header adjustments */
+    .hero-card {
+        padding: 24px;
+        margin-bottom: 24px;
+        border-radius: var(--radius-xl);
+    }
+    
+    .hero-title {
+        font-size: 24px;
+    }
+    
+    /* Tracking layout stacking */
+    .tracking-split {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    #map {
+        height: 340px;
+    }
+    
+    .telemetry-card {
+        width: 100%;
+        padding: 20px;
+    }
+
+    /* Broadcaster inputs spacing */
+    .broadcaster-inputs {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .broadcaster-inputs .form-control {
+        text-align: left;
+        padding: 12px 16px;
+    }
+    
+    /* KYC Approval Queue List */
+    #admin-kyc-queue-container > div {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 16px !important;
+    }
+}
+
+/* Breakpoint for Mobile Phones (under 480px) */
+@media (max-width: 480px) {
+    /* Brand logo typography scaling */
+    .brand-title {
+        font-size: 18px;
+    }
+    
+    .logo-badge {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+        border-radius: var(--radius-md);
+    }
+    
+    /* Toggle controls */
+    .service-toggle {
+        display: flex;
+        width: 100%;
+    }
+    
+    .service-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+    
+    /* Cards and lists */
+    .cards-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px;
+    }
+    
+    .route-card {
+        padding: 16px;
+        border-radius: var(--radius-xl);
+    }
+    
+    /* Timelines inside cards */
+    .route-timeline {
+        padding: 12px;
+    }
+    
+    .city-label {
+        font-size: 15px;
+    }
+    
+    .line-connector {
+        padding: 0 10px;
+    }
+    
+    .capacity-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .capacity-chip {
+        width: 100%;
+        padding: 8px 12px;
+    }
+    
+    .card-footer {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        text-align: center;
+    }
+    
+    .price-container {
+        align-items: center;
+    }
+    
+    .btn-book {
+        width: 100%;
+        padding: 14px;
+        font-size: 15px;
+    }
+    
+    /* Modals scaling to prevent overflowing viewport */
+    .modal-box {
+        padding: 24px 16px;
+        margin: 12px;
+        max-width: calc(100% - 24px);
+        border-radius: var(--radius-xl);
+    }
+    
+    .modal-head {
+        margin-bottom: 16px;
+    }
+    
+    .modal-head h3 {
+        font-size: 18px;
+    }
+    
+    /* Form inputs and buttons */
+    .form-control {
+        padding: 12px 14px 12px 40px;
+        font-size: 14px;
+        border-radius: var(--radius-md);
+    }
+    
+    .input-icon {
+        left: 14px;
+    }
+    
+    .btn-search {
+        padding: 12px 20px;
+        font-size: 14px;
+        border-radius: var(--radius-md);
+    }
+    
+    /* Progress Stepper vertical representation on small screens */
+    .stepper-container {
+        padding: 16px;
+    }
+    
+    .stepper-flex {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+    
+    .step-node {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        text-align: left;
+        flex: none;
+    }
+    
+    .node-circle {
+        width: 32px;
+        height: 32px;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+    
+    /* Hide desktop line connector on mobile stepper */
+    .stepper-flex::before {
+        display: none !important;
+    }
+    
+    /* OTP Grid stacking */
+    .otp-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .otp-box {
+        padding: 12px;
+    }
+    
+    .otp-code {
+        font-size: 22px;
+    }
+    
+    /* Chat window tweaks */
+    .chat-messages {
+        max-height: 220px;
+    }
+    
+    /* KYC upload grids */
+    .kyc-grid {
+        grid-template-columns: 1fr !important;
+        gap: 12px;
+    }
+}
