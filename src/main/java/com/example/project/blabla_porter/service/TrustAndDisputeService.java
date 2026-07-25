@@ -14,6 +14,8 @@ import java.util.List;
 @Service
 public class TrustAndDisputeService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TrustAndDisputeService.class);
+
     @Autowired
     private RatingRepository ratingRepository;
 
@@ -29,13 +31,61 @@ public class TrustAndDisputeService {
     @Autowired
     private PaymentRepository paymentRepository;
 
+    @Autowired
+    private TripRepository tripRepository;
+
+    @Autowired
+    private RideRequestRepository rideRequestRepository;
+
     @Transactional
     public Rating submitRating(RatingSubmitRequest req) {
         userRepository.findById(req.getRaterUserId())
                 .orElseThrow(() -> new RuntimeException("Rater user not found with id: " + req.getRaterUserId()));
 
-        User ratee = userRepository.findById(req.getRateeUserId())
+        userRepository.findById(req.getRateeUserId())
                 .orElseThrow(() -> new RuntimeException("Ratee user not found with id: " + req.getRateeUserId()));
+
+        // Verification of completed transaction and counterparty validation
+        if (req.getParcelRequestId() != null) {
+            ParcelRequest parcel = parcelRequestRepository.findById(req.getParcelRequestId())
+                    .orElseThrow(() -> new IllegalArgumentException("Parcel request not found with id: " + req.getParcelRequestId()));
+
+            if (parcel.getStatus() != ParcelRequest.ParcelStatus.DELIVERED) {
+                throw new IllegalStateException("Cannot rate for a parcel request that is not DELIVERED! Current status: " + parcel.getStatus());
+            }
+
+            Trip trip = tripRepository.findById(parcel.getTripId())
+                    .orElseThrow(() -> new IllegalArgumentException("Trip not found for parcel request"));
+
+            boolean isValidCounterparties = (req.getRaterUserId().equals(parcel.getSenderId()) && req.getRateeUserId().equals(trip.getTravelerId()))
+                    || (req.getRaterUserId().equals(trip.getTravelerId()) && req.getRateeUserId().equals(parcel.getSenderId()));
+
+            if (!isValidCounterparties) {
+                throw new IllegalArgumentException("Rater and ratee must be the sender and traveler of the completed parcel request!");
+            }
+
+        } else if (req.getRideRequestId() != null) {
+            RideRequest ride = rideRequestRepository.findById(req.getRideRequestId())
+                    .orElseThrow(() -> new IllegalArgumentException("Ride request not found with id: " + req.getRideRequestId()));
+
+            if (ride.getStatus() != RideRequest.RideStatus.COMPLETED) {
+                throw new IllegalStateException("Cannot rate for a ride request that is not COMPLETED! Current status: " + ride.getStatus());
+            }
+
+            Trip trip = tripRepository.findById(ride.getTripId())
+                    .orElseThrow(() -> new IllegalArgumentException("Trip not found for ride request"));
+
+            boolean isValidCounterparties = (req.getRaterUserId().equals(ride.getRiderId()) && req.getRateeUserId().equals(trip.getTravelerId()))
+                    || (req.getRaterUserId().equals(trip.getTravelerId()) && req.getRateeUserId().equals(ride.getRiderId()));
+
+            if (!isValidCounterparties) {
+                throw new IllegalArgumentException("Rater and ratee must be the rider and traveler of the completed ride request!");
+            }
+        } else {
+            throw new IllegalArgumentException("Rating must be linked to either a parcel request or a ride request!");
+        }
+
+        User ratee = userRepository.findById(req.getRateeUserId()).orElseThrow();
 
         Rating rating = Rating.builder()
                 .raterUserId(req.getRaterUserId())
@@ -82,6 +132,11 @@ public class TrustAndDisputeService {
 
     @Transactional
     public Dispute resolveDispute(Long disputeId, Dispute.DisputeStatus resolutionStatus, String adminNotes) {
+        return resolveDispute(disputeId, resolutionStatus, adminNotes, null);
+    }
+
+    @Transactional
+    public Dispute resolveDispute(Long disputeId, Dispute.DisputeStatus resolutionStatus, String adminNotes, Long adminId) {
         Dispute dispute = disputeRepository.findById(disputeId)
                 .orElseThrow(() -> new RuntimeException("Dispute not found with id: " + disputeId));
 
@@ -94,6 +149,9 @@ public class TrustAndDisputeService {
         dispute.setStatus(resolutionStatus);
         dispute.setAdminNotes(adminNotes);
         dispute.setResolvedAt(LocalDateTime.now());
+
+        log.info("AUDIT LOG: Admin [ID: {}] resolved Dispute [ID: {}] with status: '{}'. Notes: '{}'. Timestamp: {}",
+                adminId != null ? adminId : "SYSTEM", disputeId, resolutionStatus, adminNotes, java.time.LocalDateTime.now());
 
         // Perform financial arbitration if linked to a parcel request
         if (dispute.getParcelRequestId() != null) {

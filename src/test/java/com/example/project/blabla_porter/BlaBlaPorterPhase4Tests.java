@@ -47,6 +47,9 @@ public class BlaBlaPorterPhase4Tests {
     @Autowired
     private PaymentRepository paymentRepository;
 
+    @Autowired
+    private com.example.project.blabla_porter.repository.ParcelRequestRepository parcelRequestRepository;
+
     private User sender;
     private User traveler;
     private Trip trip;
@@ -97,6 +100,11 @@ public class BlaBlaPorterPhase4Tests {
         parcel = parcelService.createParcelRequest(pReq);
         parcelService.acceptParcelRequest(parcel.getId(), traveler.getId());
         parcelService.payEscrow(parcel.getId(), sender.getId());
+
+        // Update status to DELIVERED so ratings are allowed under security constraints
+        com.example.project.blabla_porter.model.ParcelRequest dbParcel = parcelRequestRepository.findById(parcel.getId()).orElseThrow();
+        dbParcel.setStatus(com.example.project.blabla_porter.model.ParcelRequest.ParcelStatus.DELIVERED);
+        parcel = parcelRequestRepository.save(dbParcel);
     }
 
     @Test

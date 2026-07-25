@@ -111,6 +111,12 @@
 			<artifactId>firebase-admin</artifactId>
 			<version>9.2.0</version>
 		</dependency>
+		<!-- Sentry Monitoring & Alerting Core -->
+		<dependency>
+			<groupId>io.sentry</groupId>
+			<artifactId>sentry</artifactId>
+			<version>7.8.0</version>
+		</dependency>
 	</dependencies>
 
 	<build>

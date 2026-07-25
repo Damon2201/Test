@@ -1202,9 +1202,11 @@ public class TwoHundredRealTimeProductionTests {
     }
 
     private RatingSubmitRequest createSampleRatingReq(int score) {
+        ParcelRequest p = setupDeliveredParcel();
         RatingSubmitRequest r = new RatingSubmitRequest();
         r.setRaterUserId(sender.getId());
         r.setRateeUserId(traveler.getId());
+        r.setParcelRequestId(p.getId());
         r.setScore(score);
         r.setReviewText("Feedback");
         return r;

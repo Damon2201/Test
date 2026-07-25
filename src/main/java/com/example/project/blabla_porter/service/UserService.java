@@ -11,6 +11,7 @@ import com.example.project.blabla_porter.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -78,6 +79,7 @@ public class UserService {
         if (req.getRole() == User.UserRole.ADMIN) {
             throw new IllegalArgumentException("Public registration for ADMIN role is strictly forbidden!");
         }
+        validatePasswordPolicy(req.getPassword(), req.getRole());
         return registerWithToken(req);
     }
 
@@ -165,9 +167,16 @@ public class UserService {
     }
 
     public User approveKyc(Long userId) {
+        return approveKyc(userId, null);
+    }
+
+    public User approveKyc(Long userId, Long adminId) {
         User user = getById(userId);
         user.setKycStatus(User.KycStatus.APPROVED);
         User saved = userRepository.save(user);
+
+        log.info("AUDIT LOG: Admin [ID: {}] approved KYC for User [ID: {}]. Status updated to: APPROVED. Timestamp: {}",
+                adminId != null ? adminId : "SYSTEM", userId, java.time.LocalDateTime.now());
 
         try {
             notificationService.sendPushToUser(
@@ -188,12 +197,19 @@ public class UserService {
     }
 
     public User reviewKyc(Long userId, boolean approved) {
+        return reviewKyc(userId, approved, null);
+    }
+
+    public User reviewKyc(Long userId, boolean approved, Long adminId) {
         User user = getById(userId);
         if (user.getKycStatus() != User.KycStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("User is not in PENDING_APPROVAL status! Current status: " + user.getKycStatus());
         }
         user.setKycStatus(approved ? User.KycStatus.APPROVED : User.KycStatus.REJECTED);
         User saved = userRepository.save(user);
+
+        log.info("AUDIT LOG: Admin [ID: {}] reviewed KYC for User [ID: {}]. Approved: {}. Status updated to: {}. Timestamp: {}",
+                adminId != null ? adminId : "SYSTEM", userId, approved, saved.getKycStatus(), java.time.LocalDateTime.now());
 
         try {
             String statusStr = approved ? "APPROVED" : "REJECTED";
@@ -224,5 +240,44 @@ public class UserService {
 
     public List<TrustedContact> getTrustedContacts(Long userId) {
         return trustedContactRepository.findByUserId(userId);
+    }
+
+    public void validatePasswordPolicy(String password, User.UserRole role) {
+        if (password == null || password.trim().isEmpty()) {
+            throw new IllegalArgumentException("Password cannot be empty!");
+        }
+        if (role == User.UserRole.ADMIN) {
+            if (password.length() < 12) {
+                throw new IllegalArgumentException("Admin password must be at least 12 characters long!");
+            }
+            boolean hasUpper = false, hasLower = false, hasDigit = false, hasSpecial = false;
+            for (char c : password.toCharArray()) {
+                if (Character.isUpperCase(c)) hasUpper = true;
+                else if (Character.isLowerCase(c)) hasLower = true;
+                else if (Character.isDigit(c)) hasDigit = true;
+                else if (!Character.isLetterOrDigit(c)) hasSpecial = true;
+            }
+            if (!hasUpper || !hasLower || !hasDigit || !hasSpecial) {
+                throw new IllegalArgumentException("Admin password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character!");
+            }
+        } else {
+            if (password.length() < 8) {
+                throw new IllegalArgumentException("Password must be at least 8 characters long!");
+            }
+        }
+    }
+
+    @Transactional
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = getById(userId);
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("Invalid old password!");
+        }
+        validatePasswordPolicy(newPassword, user.getRole());
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        // Invalidate all existing sessions (refresh tokens) on password change
+        refreshTokenService.deleteByUserId(userId);
     }
 }

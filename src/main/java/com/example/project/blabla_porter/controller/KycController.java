@@ -31,13 +31,15 @@ public class KycController {
 
     @PostMapping("/admin/{userId}/approve")
     @RequireRole(User.UserRole.ADMIN)
-    public User approveKyc(@PathVariable Long userId) {
-        return userService.approveKyc(userId);
+    public User approveKyc(@PathVariable Long userId, jakarta.servlet.http.HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("authenticatedUserId");
+        return userService.approveKyc(userId, adminId);
     }
 
     @PutMapping("/admin/{userId}/review")
     @RequireRole(User.UserRole.ADMIN)
-    public User reviewKyc(@PathVariable Long userId, @RequestParam boolean approve) {
-        return userService.reviewKyc(userId, approve);
+    public User reviewKyc(@PathVariable Long userId, @RequestParam boolean approve, jakarta.servlet.http.HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("authenticatedUserId");
+        return userService.reviewKyc(userId, approve, adminId);
     }
 }

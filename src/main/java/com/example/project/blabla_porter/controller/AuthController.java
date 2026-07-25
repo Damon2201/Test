@@ -141,11 +141,44 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public java.util.Map<String, String> logoutUser(@RequestParam Long userId) {
-        refreshTokenService.deleteByUserId(userId);
+    public java.util.Map<String, String> logoutUser(@RequestParam(required = false) Long userId,
+                                                    jakarta.servlet.http.HttpServletRequest httpRequest) {
+        Long authenticatedUserId = (Long) httpRequest.getAttribute("authenticatedUserId");
+        Long targetUserId = (authenticatedUserId != null) ? authenticatedUserId : userId;
+        if (targetUserId == null) {
+            throw new IllegalArgumentException("User ID is required for logout!");
+        }
+        refreshTokenService.deleteByUserId(targetUserId);
         java.util.Map<String, String> response = new java.util.HashMap<>();
         response.put("status", "success");
         response.put("message", "User logged out successfully!");
+        return response;
+    }
+
+    @PostMapping("/logout/all")
+    public java.util.Map<String, String> logoutAll(jakarta.servlet.http.HttpServletRequest httpRequest) {
+        Long authenticatedUserId = (Long) httpRequest.getAttribute("authenticatedUserId");
+        if (authenticatedUserId == null) {
+            throw new IllegalArgumentException("Unauthorized access!");
+        }
+        refreshTokenService.deleteByUserId(authenticatedUserId);
+        java.util.Map<String, String> response = new java.util.HashMap<>();
+        response.put("status", "success");
+        response.put("message", "Logged out from all devices successfully!");
+        return response;
+    }
+
+    @PostMapping("/change-password")
+    public java.util.Map<String, String> changePassword(@Valid @RequestBody com.example.project.blabla_porter.dto.ChangePasswordRequest request,
+                                                         jakarta.servlet.http.HttpServletRequest httpRequest) {
+        Long authenticatedUserId = (Long) httpRequest.getAttribute("authenticatedUserId");
+        if (authenticatedUserId == null) {
+            throw new IllegalArgumentException("Unauthorized access!");
+        }
+        userService.changePassword(authenticatedUserId, request.getOldPassword(), request.getNewPassword());
+        java.util.Map<String, String> response = new java.util.HashMap<>();
+        response.put("status", "success");
+        response.put("message", "Password changed successfully and sessions revoked!");
         return response;
     }
 }

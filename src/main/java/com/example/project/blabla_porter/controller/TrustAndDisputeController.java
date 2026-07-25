@@ -42,8 +42,10 @@ public class TrustAndDisputeController {
     @RequireRole(User.UserRole.ADMIN)
     public Dispute resolveDispute(@PathVariable Long id,
                                    @RequestParam Dispute.DisputeStatus resolutionStatus,
-                                   @RequestParam(required = false) String adminNotes) {
-        return trustAndDisputeService.resolveDispute(id, resolutionStatus, adminNotes);
+                                   @RequestParam(required = false) String adminNotes,
+                                   jakarta.servlet.http.HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("authenticatedUserId");
+        return trustAndDisputeService.resolveDispute(id, resolutionStatus, adminNotes, adminId);
     }
 
     @GetMapping("/disputes/{id}")

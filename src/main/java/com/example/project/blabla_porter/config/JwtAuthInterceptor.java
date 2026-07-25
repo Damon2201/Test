@@ -62,8 +62,10 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
                         }
                     }
                     if (!hasAccess) {
-                        log.warn("Security Alert: User {} with capabilities {} was denied access to URI '{}'. Required roles: {}",
+                        String errMsg = String.format("Security Alert: User %d with capabilities %s was denied access to URI '%s'. Required roles: %s",
                                 userId, capabilities, request.getRequestURI(), Arrays.toString(allowedRoles));
+                        log.warn(errMsg);
+                        io.sentry.Sentry.captureMessage(errMsg);
                         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                         response.setContentType("application/json");
                         response.getWriter().write("{\"error\": \"Forbidden: Access denied for capabilities "

@@ -48,7 +48,7 @@ public class GlobalExceptionHandler {
     // To Handle custom runtime errors
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(RuntimeException ex) {
-
+        io.sentry.Sentry.captureException(ex);
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getMessage());
 
@@ -58,6 +58,7 @@ public class GlobalExceptionHandler {
     // To Handle rate limit exceeded errors
     @ExceptionHandler(com.example.project.blabla_porter.exception.RateLimitExceededException.class)
     public ResponseEntity<Map<String, String>> handleRateLimit(com.example.project.blabla_porter.exception.RateLimitExceededException ex) {
+        io.sentry.Sentry.captureMessage("Security Alert: Rate limit exceeded - " + ex.getMessage());
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.TOO_MANY_REQUESTS);
@@ -66,7 +67,7 @@ public class GlobalExceptionHandler {
     // To Handle unexpected errors
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleException(Exception ex) {
-
+        io.sentry.Sentry.captureException(ex);
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getMessage());
 
