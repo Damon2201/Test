@@ -64,6 +64,7 @@ let selectedTripForSeatBooking = null;
 let currentSeatQuote = null;
 let selectedRideForTracking = null;
 let riderActiveSubTab = 'carpool';
+let currentCustomerTab = ''; // 'parcel', 'carpool', 'taxi', 'profile'
 let currentLocalTaxiQuote = null;
 let localTaxiBookingMapInstance = null;
 let localTaxiPickupMarker = null;
@@ -235,7 +236,19 @@ function renderApp() {
 
     if (!currentUser) {
         mainContentHtml = renderUnauthenticatedLanding();
+        document.body.classList.remove('customer-theme');
     } else {
+        if (currentUser.role === 'SENDER' || currentUser.role === 'RIDER') {
+            document.body.classList.add('customer-theme');
+            if (currentUser.role === 'SENDER' && currentCustomerTab !== 'parcel' && currentCustomerTab !== 'profile') {
+                currentCustomerTab = 'parcel';
+            } else if (currentUser.role === 'RIDER' && currentCustomerTab !== 'carpool' && currentCustomerTab !== 'taxi' && currentCustomerTab !== 'profile') {
+                currentCustomerTab = 'carpool';
+            }
+        } else {
+            document.body.classList.remove('customer-theme');
+        }
+
         switch (currentUser.role) {
             case 'SENDER':
                 mainContentHtml = renderSenderPortal();
@@ -256,11 +269,40 @@ function renderApp() {
 
     let modalsHtml = renderActiveModal();
 
+    let navBarHtml = '';
+    if (currentUser && (currentUser.role === 'SENDER' || currentUser.role === 'RIDER')) {
+        const isSender = currentUser.role === 'SENDER';
+        navBarHtml = `
+            <nav class="bottom-nav-bar">
+                ${isSender ? `
+                    <button class="bottom-nav-item ${currentCustomerTab === 'parcel' ? 'active' : ''}" onclick="switchCustomerTab('parcel')">
+                        <span class="nav-icon">📦</span>
+                        <span>Parcel</span>
+                    </button>
+                ` : `
+                    <button class="bottom-nav-item ${currentCustomerTab === 'carpool' ? 'active' : ''}" onclick="switchCustomerTab('carpool')">
+                        <span class="nav-icon">🚗</span>
+                        <span>Carpool</span>
+                    </button>
+                    <button class="bottom-nav-item ${currentCustomerTab === 'taxi' ? 'active' : ''}" onclick="switchCustomerTab('taxi')">
+                        <span class="nav-icon">🚖</span>
+                        <span>Local Taxi</span>
+                    </button>
+                `}
+                <button class="bottom-nav-item ${currentCustomerTab === 'profile' ? 'active' : ''}" onclick="switchCustomerTab('profile')">
+                    <span class="nav-icon">👤</span>
+                    <span>Profile</span>
+                </button>
+            </nav>
+        `;
+    }
+
     root.innerHTML = `
         ${headerHtml}
-        <main class="main-wrapper">
+        <main class="main-wrapper" style="${currentUser && (currentUser.role === 'SENDER' || currentUser.role === 'RIDER') ? 'padding-bottom: 80px;' : ''}">
             ${mainContentHtml}
         </main>
+        ${navBarHtml}
         ${modalsHtml}
     `;
 
@@ -282,33 +324,70 @@ function escapeHtml(str) {
 // 1. SENDER PORTAL (Rendered ONLY for SENDER role)
 // ----------------------------------------------------------------------------
 function renderSenderPortal() {
+    if (currentCustomerTab === 'profile') {
+        return renderCustomerProfile();
+    }
+
     return `
-        <div class="hero-card">
-            <div class="hero-header">
-                <div class="hero-subtitle">📦 Parcel Sender Portal (Standard Customer)</div>
-                <h1 class="hero-title">Search Available Captain Trips & Book Crowd-Shipping</h1>
-                <button class="btn-search" style="margin-top:16px; background:var(--porter-teal); color:white; border:none; box-shadow:0 4px 15px rgba(6,182,212,0.3);" onclick="openGeneralBookingModal()">
+        <div class="map-first-layout">
+            <div class="map-first-container">
+                <div id="customer-map" class="map-first-map"></div>
+                <div class="map-first-header">
+                    <div class="map-first-logo">BP Parcel</div>
+                </div>
+            </div>
+            <div class="map-first-panel">
+                <div class="bottom-sheet-drag-handle"></div>
+                <div style="margin-bottom:20px;">
+                    <h1 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:4px;">📦 Inter-City Freight</h1>
+                    <p style="font-size:12px; color:var(--text-body);">Search active Captain routes or post an auto-matching parcel request.</p>
+                </div>
+
+                <button class="btn-search" style="width:100%; border:none; margin-bottom:20px; font-weight:700;" onclick="openGeneralBookingModal()">
                     📦 Post General Parcel Request (Auto-Match)
                 </button>
+
+                <!-- Recent locations suggestion list -->
+                <div class="recent-locations-container">
+                    <div class="recent-locations-title">🕒 QUICK SUGGESTIONS</div>
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        ${getRecentLocations().slice(0, 2).map(loc => `
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                <div class="recent-location-item" onclick="useRecentLocation('${escapeHtml(loc.name)}', ${loc.lat}, ${loc.lng}, 'pickup')" style="padding:10px;">
+                                    <div class="recent-location-icon" style="width:24px; height:24px; font-size:11px;">📍</div>
+                                    <div class="recent-location-details">
+                                        <span class="recent-location-name" style="font-size:12px;">${escapeHtml(loc.name.split(',')[0])}</span>
+                                        <span class="recent-location-address" style="font-size:10px;">Set Pickup</span>
+                                    </div>
+                                </div>
+                                <div class="recent-location-item" onclick="useRecentLocation('${escapeHtml(loc.name)}', ${loc.lat}, ${loc.lng}, 'dropoff')" style="padding:10px; border-color: rgba(99,102,241,0.2);">
+                                    <div class="recent-location-icon" style="width:24px; height:24px; font-size:11px; color:var(--primary); background:rgba(99,102,241,0.1);">🏁</div>
+                                    <div class="recent-location-details">
+                                        <span class="recent-location-name" style="font-size:12px;">${escapeHtml(loc.name.split(',')[0])}</span>
+                                        <span class="recent-location-address" style="font-size:10px;">Set Dropoff</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="section-header" style="margin-top:20px;">
+                    <h2 class="section-title">Available Inter-City Captain Deliveries</h2>
+                    <span class="section-tag">Browse & Pick</span>
+                </div>
+                <div id="sender-trips-container" class="cards-grid" style="margin-bottom:24px;">
+                    <div style="color:var(--text-body); padding:20px; font-size:12px;">Loading active routes...</div>
+                </div>
+
+                <div class="section-header">
+                    <h2 class="section-title">My Booked Parcels & Escrows</h2>
+                    <span class="section-tag">Track Status</span>
+                </div>
+                <div id="sender-parcels-container" class="cards-grid">
+                    <div style="color:var(--text-body); padding:20px; font-size:12px;">Loading bookings...</div>
+                </div>
             </div>
-        </div>
-
-        <div class="section-header">
-            <h2 class="section-title">Available Inter-City Captain Deliveries</h2>
-            <span class="section-tag">BlaBlaCar-Style Browse & Pick</span>
-        </div>
-
-        <div id="sender-trips-container" class="cards-grid">
-            <div style="color:var(--text-body); padding:40px;">Loading active routes...</div>
-        </div>
-
-        <div class="section-header" style="margin-top:40px;">
-            <h2 class="section-title">My Booked Parcels & Escrows</h2>
-            <span class="section-tag">Track Status & Handover OTPs</span>
-        </div>
-
-        <div id="sender-parcels-container" class="cards-grid">
-            <div style="color:var(--text-body); padding:40px;">Loading bookings...</div>
         </div>
     `;
 }
@@ -460,125 +539,166 @@ function renderCaptainPortal() {
 // 3. PASSENGER RIDER PORTAL (Rendered ONLY for RIDER role)
 // ----------------------------------------------------------------------------
 function renderRiderPortal() {
+    if (currentCustomerTab === 'profile') {
+        return renderCustomerProfile();
+    }
+
+    if (currentCustomerTab === 'taxi') {
+        return `
+            <div class="map-first-layout">
+                <div class="map-first-container">
+                    <div id="local-taxi-booking-map" class="map-first-map"></div>
+                    <div class="map-first-header">
+                        <div class="map-first-logo">BP Local Taxi</div>
+                    </div>
+                </div>
+                <div class="map-first-panel">
+                    <div class="bottom-sheet-drag-handle"></div>
+                    <div style="margin-bottom:20px;">
+                        <h1 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:4px;">🚖 Same-City Local Taxi</h1>
+                        <p style="font-size:12px; color:var(--text-body);">Instantly match with nearby drivers inside your city.</p>
+                    </div>
+
+                    <form id="local-taxi-booking-form" onsubmit="submitLocalTaxiBookingForm(event)">
+                        <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:16px;">
+                            <div class="form-group" style="position:relative; margin-bottom:0;">
+                                <label class="form-label">Pickup Area Address</label>
+                                <input type="text" id="local-taxi-pickup" class="form-control" style="padding-left:16px;" value="Koramangala, Bengaluru" autocomplete="off" required />
+                                <div id="local-taxi-pickup-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
+                                <input type="hidden" id="local-taxi-pickup-lat" value="12.9352" />
+                                <input type="hidden" id="local-taxi-pickup-lng" value="77.6245" />
+                            </div>
+                            <div class="form-group" style="position:relative; margin-bottom:0;">
+                                <label class="form-label">Dropoff Area Address</label>
+                                <input type="text" id="local-taxi-dropoff" class="form-control" style="padding-left:16px;" value="Indiranagar, Bengaluru" autocomplete="off" required />
+                                <div id="local-taxi-dropoff-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
+                                <input type="hidden" id="local-taxi-dropoff-lat" value="12.9719" />
+                                <input type="hidden" id="local-taxi-dropoff-lng" value="77.6412" />
+                            </div>
+                        </div>
+
+                        <!-- Suggestions list of Recent/Popular locations -->
+                        <div class="recent-locations-container" style="margin-bottom:16px;">
+                            <div class="recent-locations-title" style="font-size:11px;">🕒 QUICK SUGGESTIONS</div>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                ${getRecentLocations().slice(0, 2).map(loc => `
+                                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                        <div class="recent-location-item" onclick="useRecentLocation('${escapeHtml(loc.name)}', ${loc.lat}, ${loc.lng}, 'pickup')" style="padding:8px 12px;">
+                                            <div class="recent-location-icon" style="width:20px; height:20px; font-size:10px;">📍</div>
+                                            <div class="recent-location-details">
+                                                <span class="recent-location-name" style="font-size:11px;">${escapeHtml(loc.name.split(',')[0])}</span>
+                                                <span class="recent-location-address" style="font-size:9px;">Set Pickup</span>
+                                            </div>
+                                        </div>
+                                        <div class="recent-location-item" onclick="useRecentLocation('${escapeHtml(loc.name)}', ${loc.lat}, ${loc.lng}, 'dropoff')" style="padding:8px 12px; border-color: rgba(99,102,241,0.2);">
+                                            <div class="recent-location-icon" style="width:20px; height:20px; font-size:10px; color:var(--primary); background:rgba(99,102,241,0.1);">🏁</div>
+                                            <div class="recent-location-details">
+                                                <span class="recent-location-name" style="font-size:11px;">${escapeHtml(loc.name.split(',')[0])}</span>
+                                                <span class="recent-location-address" style="font-size:9px;">Set Dropoff</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="local-taxi-safety-mode" checked />
+                            <label for="local-taxi-safety-mode" class="form-label" style="margin-bottom:0; cursor:pointer; font-weight:700;">
+                                🚨 Enable 3-Stage Safety Mode (SOS, silent ping, check-ins)
+                            </label>
+                        </div>
+
+                        <div id="local-taxi-fare-breakdown-box" style="background:var(--bg-surface); padding:16px; border-radius:12px; margin-bottom:20px; border:1px solid var(--border);">
+                            <!-- Dynamic local fare breakdown will show here -->
+                        </div>
+
+                        <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient); box-shadow:0 4px 15px rgba(6,182,212,0.3); border:none;">Book Local Taxi & Pay Escrow (INR ₹)</button>
+                    </form>
+
+                    <div class="section-header" style="margin-top:24px;">
+                        <h2 class="section-title">💺 Active Taxi & Carpool Bookings</h2>
+                        <span class="section-tag">Manage & Track</span>
+                    </div>
+                    <div id="rider-rides-container" class="cards-grid" style="margin-bottom: 24px;">
+                        <div style="color:var(--text-muted); padding:20px; font-size:12px;">Loading bookings...</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Default to Carpool
     return `
-        <div class="hero-card">
-            <div class="hero-header">
-                <div class="hero-subtitle">🚖 Passenger Carpooling Portal</div>
-                <h1 class="hero-title">Book Inter-City Seat & Manage Safety Contacts</h1>
-            </div>
-        </div>
-
-        <div style="display:flex; gap:12px; margin-bottom:28px;">
-            <button class="service-btn ${riderActiveSubTab === 'carpool' ? 'active' : ''}" onclick="setRiderSubTab('carpool')">🚗 Inter-City Carpool</button>
-            <button class="service-btn ${riderActiveSubTab === 'taxi' ? 'active' : ''}" onclick="setRiderSubTab('taxi')">🚖 Same-City Local Taxi</button>
-        </div>
-
-        ${riderActiveSubTab === 'carpool' ? `
-            <div class="section-header">
-                <h2 class="section-title">🔍 Search Inter-City Carpool Seats</h2>
-                <span class="section-tag">Find Drivers Sharing Route & Seats</span>
-            </div>
-
-            <div class="route-card" style="padding: 24px; margin-bottom: 24px;">
-                <div class="rider-search-grid">
-                    <div class="form-group" style="position:relative;">
-                        <label class="form-label" for="rider-search-source">Leaving From</label>
-                        <input type="text" id="rider-search-source" class="form-control" placeholder="e.g., Bengaluru" style="padding-left: 16px;" autocomplete="off" />
-                        <div id="rider-search-source-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                    </div>
-                    <div class="form-group" style="position:relative;">
-                        <label class="form-label" for="rider-search-destination">Going To</label>
-                        <input type="text" id="rider-search-destination" class="form-control" placeholder="e.g., Chennai" style="padding-left: 16px;" autocomplete="off" />
-                        <div id="rider-search-destination-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                    </div>
-                    <button class="btn-search" onclick="triggerRiderSearch()" style="height: 46px; padding: 0 32px; width: 100%;">Search Seats</button>
+        <div class="map-first-layout">
+            <div class="map-first-container">
+                <div id="customer-map" class="map-first-map"></div>
+                <div class="map-first-header">
+                    <div class="map-first-logo">BP Carpool</div>
                 </div>
             </div>
-
-            <div id="rider-search-results" class="cards-grid" style="margin-bottom: 32px;">
-                <div style="color:var(--text-muted); padding:20px;">Use search fields above to query routes.</div>
-            </div>
-        ` : `
-            <div class="section-header">
-                <h2 class="section-title">🔍 Same-City Local Taxi Booking</h2>
-                <span class="section-tag">Instantly Match Nearby Available Captains</span>
-            </div>
-
-            <div class="route-card" style="padding: 24px; margin-bottom: 24px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                    <h2 style="font-size:20px; font-weight:800;">🚖 Book Same-City Instant Taxi</h2>
-                    <span class="verified-badge" style="background:rgba(6,182,212,0.15); color:var(--porter-teal);">ON-DEMAND MATCHING</span>
+            <div class="map-first-panel">
+                <div class="bottom-sheet-drag-handle"></div>
+                <div style="margin-bottom:20px;">
+                    <h1 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:4px;">🚗 Inter-City Carpool</h1>
+                    <p style="font-size:12px; color:var(--text-body);">Find available co-ride seats shared by trusted inter-city drivers.</p>
                 </div>
-                
-                <form id="local-taxi-booking-form" onsubmit="submitLocalTaxiBookingForm(event)">
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
-                        <div class="form-group" style="position:relative;">
-                            <label class="form-label">Pickup Area Address</label>
-                            <input type="text" id="local-taxi-pickup" class="form-control" style="padding-left:16px;" value="Koramangala, Bengaluru" autocomplete="off" required />
-                            <div id="local-taxi-pickup-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                            <input type="hidden" id="local-taxi-pickup-lat" value="12.9352" />
-                            <input type="hidden" id="local-taxi-pickup-lng" value="77.6245" />
+
+                <div class="route-card" style="padding: 20px; margin-bottom: 20px; border-radius:16px;">
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        <div class="form-group" style="position:relative; margin-bottom:0;">
+                            <label class="form-label" style="font-size:11px;">Leaving From</label>
+                            <input type="text" id="rider-search-source" class="form-control" placeholder="e.g., Bengaluru" style="padding-left: 16px;" autocomplete="off" />
+                            <div id="rider-search-source-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                         </div>
-                        <div class="form-group" style="position:relative;">
-                            <label class="form-label">Dropoff Area Address</label>
-                            <input type="text" id="local-taxi-dropoff" class="form-control" style="padding-left:16px;" value="Indiranagar, Bengaluru" autocomplete="off" required />
-                            <div id="local-taxi-dropoff-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                            <input type="hidden" id="local-taxi-dropoff-lat" value="12.9719" />
-                            <input type="hidden" id="local-taxi-dropoff-lng" value="77.6412" />
+                        <div class="form-group" style="position:relative; margin-bottom:0;">
+                            <label class="form-label" style="font-size:11px;">Going To</label>
+                            <input type="text" id="rider-search-destination" class="form-control" placeholder="e.g., Chennai" style="padding-left: 16px;" autocomplete="off" />
+                            <div id="rider-search-destination-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                         </div>
+                        <button class="btn-search" onclick="triggerRiderSearch()" style="height: 40px; border:none; width: 100%; font-weight:700;">Search Seats</button>
                     </div>
+                </div>
 
-                    <div id="local-taxi-booking-map" style="height:220px; border-radius:12px; margin-bottom:16px; border:1px solid var(--border); z-index:1;"></div>
-
-                    <div class="form-group" style="margin-bottom:16px; display:flex; align-items:center; gap:8px;">
-                        <input type="checkbox" id="local-taxi-safety-mode" checked />
-                        <label for="local-taxi-safety-mode" class="form-label" style="margin-bottom:0; cursor:pointer; font-weight:700;">
-                            🚨 Enable 3-Stage Safety Mode (SOS, silent ping, check-ins)
-                        </label>
+                <!-- Suggestions list of Recent/Popular locations -->
+                <div class="recent-locations-container" style="margin-bottom:20px;">
+                    <div class="recent-locations-title" style="font-size:11px;">🕒 QUICK SUGGESTIONS</div>
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                        ${getRecentLocations().slice(0, 2).map(loc => `
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                <div class="recent-location-item" onclick="useRecentLocation('${escapeHtml(loc.name)}', ${loc.lat}, ${loc.lng}, 'pickup')" style="padding:8px 12px;">
+                                    <div class="recent-location-icon" style="width:20px; height:20px; font-size:10px;">📍</div>
+                                    <div class="recent-location-details">
+                                        <span class="recent-location-name" style="font-size:11px;">${escapeHtml(loc.name.split(',')[0])}</span>
+                                        <span class="recent-location-address" style="font-size:9px;">Set Origin</span>
+                                    </div>
+                                </div>
+                                <div class="recent-location-item" onclick="useRecentLocation('${escapeHtml(loc.name)}', ${loc.lat}, ${loc.lng}, 'dropoff')" style="padding:8px 12px; border-color: rgba(99,102,241,0.2);">
+                                    <div class="recent-location-icon" style="width:20px; height:20px; font-size:10px; color:var(--primary); background:rgba(99,102,241,0.1);">🏁</div>
+                                    <div class="recent-location-details">
+                                        <span class="recent-location-name" style="font-size:11px;">${escapeHtml(loc.name.split(',')[0])}</span>
+                                        <span class="recent-location-address" style="font-size:9px;">Set Dest</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
-
-                    <div id="local-taxi-fare-breakdown-box" style="background:var(--bg-surface); padding:16px; border-radius:12px; margin-bottom:20px; border:1px solid var(--border);">
-                        <!-- Dynamic local fare breakdown will show here -->
-                    </div>
-
-                    <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient); box-shadow:0 4px 15px rgba(6,182,212,0.3);">Book Local Taxi & Pay Escrow (INR ₹)</button>
-                </form>
-            </div>
-        `}
-
-        <div class="section-header">
-            <h2 class="section-title">💺 Your Seat Bookings & Safety Escrow</h2>
-            <span class="section-tag">Live tracking, Escrow control & Safety check-ins</span>
-        </div>
-
-        <div id="rider-rides-container" class="cards-grid" style="margin-bottom: 32px;">
-            <div style="color:var(--text-muted); padding:20px;">Loading your bookings...</div>
-        </div>
-
-        <div class="section-header">
-            <h2 class="section-title">🛡️ Emergency Safety Contacts</h2>
-            <span class="section-tag">Trusted contacts for Stage-3 automatic escalations</span>
-        </div>
-
-        <div class="route-card" style="padding: 24px; margin-bottom: 32px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 16px; align-items: end; margin-bottom: 20px;">
-                <div class="form-group">
-                    <label class="form-label" for="rider-contact-name">Contact Name</label>
-                    <input type="text" id="rider-contact-name" class="form-control" placeholder="e.g., John Doe" style="padding-left: 16px;" />
                 </div>
-                <div class="form-group">
-                    <label class="form-label" for="rider-contact-phone">Mobile Number</label>
-                    <input type="text" id="rider-contact-phone" class="form-control" placeholder="e.g., 9876543210" style="padding-left: 16px;" />
+
+                <div class="section-header">
+                    <h2 class="section-title">🔍 Search Results</h2>
                 </div>
-                <div class="form-group">
-                    <label class="form-label" for="rider-contact-relationship">Relationship</label>
-                    <input type="text" id="rider-contact-relationship" class="form-control" placeholder="e.g., Brother" style="padding-left: 16px;" />
+                <div id="rider-search-results" class="cards-grid" style="margin-bottom: 24px;">
+                    <div style="color:var(--text-muted); padding:20px; font-size:12px;">Use search fields above to query routes.</div>
                 </div>
-                <button class="btn-search" onclick="addTrustedContactBtn()" style="height: 46px; padding: 0 24px; background: var(--porter-teal);">Add Contact</button>
-            </div>
-            
-            <div id="rider-contacts-container">
-                <div style="color:var(--text-muted); padding:10px;">Loading safety contacts...</div>
+
+                <div class="section-header">
+                    <h2 class="section-title">💺 Your Seat Bookings & Safety Escrow</h2>
+                    <span class="section-tag">Track & Escalation</span>
+                </div>
+                <div id="rider-rides-container" class="cards-grid" style="margin-bottom: 24px;">
+                    <div style="color:var(--text-muted); padding:20px; font-size:12px;">Loading bookings...</div>
+                </div>
             </div>
         </div>
     `;
@@ -631,6 +751,12 @@ function renderUnauthenticatedLanding() {
 // Modals Renderer
 function renderActiveModal() {
     if (!activeModal) return '';
+
+    const isCustomer = currentUser && (currentUser.role === 'SENDER' || currentUser.role === 'RIDER');
+    const wrapStart = isCustomer 
+        ? `<div class="bottom-sheet-backdrop show"><div class="bottom-sheet"><div class="bottom-sheet-drag-handle"></div>`
+        : `<div class="modal-backdrop show"><div class="modal-box">`;
+    const wrapEnd = `</div></div>`;
 
     if (activeModal === 'signin' || activeModal === 'register') {
         const isSignIn = activeModal === 'signin';
@@ -725,9 +851,8 @@ function renderActiveModal() {
         const pickupVal = selectedTripForBooking ? selectedTripForBooking.source : "Indiranagar, Bengaluru";
         const dropoffVal = selectedTripForBooking ? selectedTripForBooking.destination : "Banjara Hills, Hyderabad";
         return `
-            <div class="modal-backdrop show">
-                <div class="modal-box">
-                    <div class="modal-head">
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
                         <h3>📦 Book P2P Crowd-Shipping Delivery</h3>
                         <button class="btn-close" onclick="closeModal()">✕</button>
                     </div>
@@ -782,16 +907,14 @@ function renderActiveModal() {
                         </div>
                         <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient); box-shadow:0 4px 15px rgba(6,182,212,0.3);">Confirm Booking & Pay Escrow (INR ₹)</button>
                     </form>
-                </div>
-            </div>
+            ${wrapEnd}
         `;
     }
 
     if (activeModal === 'verify-pickup' && selectedParcelForVerification) {
         return `
-            <div class="modal-backdrop show">
-                <div class="modal-box">
-                    <div class="modal-head">
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
                         <h3>📦 Verify Handover & Pickup</h3>
                         <button class="btn-close" onclick="closeModal()">✕</button>
                     </div>
@@ -809,16 +932,14 @@ function renderActiveModal() {
                         </div>
                         <button type="submit" class="btn-search" style="width:100%; background:var(--primary-gradient);">Confirm Pickup Verification</button>
                     </form>
-                </div>
-            </div>
+            ${wrapEnd}
         `;
     }
 
     if (activeModal === 'verify-delivery' && selectedParcelForVerification) {
         return `
-            <div class="modal-backdrop show">
-                <div class="modal-box">
-                    <div class="modal-head">
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
                         <h3>📦 Verify Cargo Destination Delivery</h3>
                         <button class="btn-close" onclick="closeModal()">✕</button>
                     </div>
@@ -836,8 +957,7 @@ function renderActiveModal() {
                         </div>
                         <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green); box-shadow: 0 4px 15px var(--accent-glow);">Confirm Delivery & Release Escrow</button>
                     </form>
-                </div>
-            </div>
+            ${wrapEnd}
         `;
     }
 
@@ -887,9 +1007,8 @@ function renderActiveModal() {
     if (activeModal === 'chat' && selectedParcelForChat) {
         setTimeout(() => { loadChatMessages(selectedParcelForChat.id); }, 100);
         return `
-            <div class="modal-backdrop show">
-                <div class="modal-box" style="max-width:500px;">
-                    <div class="modal-head">
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
                         <h3>💬 P2P Handshake Chat (Booking #${selectedParcelForChat.id})</h3>
                         <button class="btn-close" onclick="closeModal()">✕</button>
                     </div>
@@ -902,16 +1021,14 @@ function renderActiveModal() {
                             <button type="submit" class="btn-search" style="padding:0 24px;">Send</button>
                         </div>
                     </form>
-                </div>
-            </div>
+            ${wrapEnd}
         `;
     }
 
     if (activeModal === 'tracking' && selectedParcelForTracking) {
         return `
-            <div class="modal-backdrop show">
-                <div class="modal-box" style="max-width:600px;">
-                    <div class="modal-head">
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
                         <h3>🗺️ Live Telemetry Tracking (Booking #${selectedParcelForTracking.id})</h3>
                         <button class="btn-close" onclick="closeModal()">✕</button>
                     </div>
@@ -934,8 +1051,7 @@ function renderActiveModal() {
                         </div>
                     </div>
                     <div id="tracking-map" style="height:320px; border-radius:12px; border:1px solid var(--border); z-index:1;"></div>
-                </div>
-            </div>
+            ${wrapEnd}
         `;
     }
 
@@ -943,9 +1059,8 @@ function renderActiveModal() {
         const q = currentSeatQuote || { baseFare: 50, distanceFare: 0, totalFare: 50 };
         const trip = selectedTripForSeatBooking;
         return `
-            <div class="modal-backdrop show">
-                <div class="modal-box">
-                    <div class="modal-head">
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
                         <h3>💺 Book Passenger Co-Ride Seat</h3>
                         <button class="btn-close" onclick="closeModal()">✕</button>
                     </div>
@@ -988,17 +1103,15 @@ function renderActiveModal() {
                         </div>
                         <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient); box-shadow:0 4px 15px rgba(6,182,212,0.3);">Confirm Booking & Pay Escrow (INR ₹)</button>
                     </form>
-                </div>
-            </div>
+            ${wrapEnd}
         `;
     }
 
     if (activeModal === 'ride-tracking' && selectedRideForTracking) {
         const ride = selectedRideForTracking;
         return `
-            <div class="modal-backdrop show">
-                <div class="modal-box" style="max-width:600px;">
-                    <div class="modal-head">
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
                         <h3>🗺️ Ride Live Telemetry & Safety Console</h3>
                         <button class="btn-close" onclick="closeModal()">✕</button>
                     </div>
@@ -1047,8 +1160,7 @@ function renderActiveModal() {
                         </div>
                     </div>
                     ` : ''}
-                </div>
-            </div>
+            ${wrapEnd}
         `;
     }
 
@@ -1267,9 +1379,11 @@ function bindPostRenderListeners() {
         fetchCaptainLocalBookings();
     }
 
-    // 1.5 Initialize Maps if containers exist
     if (document.getElementById('booking-map')) {
         setTimeout(initBookingMap, 150);
+    }
+    if (document.getElementById('customer-map')) {
+        setTimeout(window.initCustomerMap, 150);
     }
     if (document.getElementById('telemetry-map')) {
         setTimeout(initTelemetryMap, 150);
@@ -2101,11 +2215,45 @@ window.sendRegistrationOtpBtn = async function() {
     }
 };
 
-window.openGeneralBookingModal = function() {
+window.openGeneralBookingModal = async function() {
     selectedTripForBooking = null;
     activeModal = 'book-parcel';
     renderApp();
     updateFareQuote(15000);
+    
+    // Geocode defaults dynamically to display a route immediately
+    try {
+        const srcRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=Indiranagar,%20Bengaluru&limit=1&countrycodes=in`, {
+            headers: { 'Accept-Language': 'en' }
+        });
+        const destRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=Banjara%20Hills,%20Hyderabad&limit=1&countrycodes=in`, {
+            headers: { 'Accept-Language': 'en' }
+        });
+        if (srcRes.ok && destRes.ok) {
+            const srcData = await srcRes.json();
+            const destData = await destRes.json();
+            
+            const lat1El = document.getElementById('book-pickup-lat');
+            const lng1El = document.getElementById('book-pickup-lng');
+            const lat2El = document.getElementById('book-dropoff-lat');
+            const lng2El = document.getElementById('book-dropoff-lng');
+            
+            if (lat1El && lng1El && lat2El && lng2El) {
+                if (srcData.length > 0) {
+                    lat1El.value = srcData[0].lat;
+                    lng1El.value = srcData[0].lon;
+                }
+                if (destData.length > 0) {
+                    lat2El.value = destData[0].lat;
+                    lng2El.value = destData[0].lon;
+                }
+            }
+            initBookingMap();
+            updateFareQuote(15000);
+        }
+    } catch (e) {
+        console.error("Error geocoding general booking defaults", e);
+    }
 };
 
 window.openChatModalBtn = async function(id) {
@@ -4175,4 +4323,187 @@ function setupSimpleAutocomplete(inputId, suggestionsId) {
         }
     });
 }
+
+// ===== Redesign State & Location Management =====
+window.switchCustomerTab = function(tab) {
+    currentCustomerTab = tab;
+    if (tab === 'carpool') riderActiveSubTab = 'carpool';
+    if (tab === 'taxi') riderActiveSubTab = 'taxi';
+    renderApp();
+};
+
+window.getRecentLocations = function() {
+    try {
+        let list = JSON.parse(localStorage.getItem('bp_recent_locations') || '[]');
+        if (list.length === 0) {
+            list = [
+                { name: "Indiranagar, Bengaluru", lat: 12.9716, lng: 77.5946 },
+                { name: "Koramangala, Bengaluru", lat: 12.9352, lng: 77.6245 },
+                { name: "Banjara Hills, Hyderabad", lat: 17.4156, lng: 78.4347 },
+                { name: "Chennai Central, Chennai", lat: 13.0827, lng: 80.2707 }
+            ];
+            localStorage.setItem('bp_recent_locations', JSON.stringify(list));
+        }
+        return list;
+    } catch (e) {
+        return [];
+    }
+};
+
+window.saveRecentLocation = function(name, lat, lng) {
+    if (!name || !lat || !lng) return;
+    try {
+        let recents = JSON.parse(localStorage.getItem('bp_recent_locations') || '[]');
+        recents = recents.filter(x => x.name !== name);
+        recents.unshift({ name, lat, lng });
+        if (recents.length > 5) recents.pop();
+        localStorage.setItem('bp_recent_locations', JSON.stringify(recents));
+    } catch (e) {
+        console.error("Error saving recent location:", e);
+    }
+};
+
+window.useRecentLocation = function(name, lat, lng, targetType) {
+    if (targetType === 'pickup') {
+        const txt = document.getElementById('book-pickup') || document.getElementById('seat-pickup') || document.getElementById('local-taxi-pickup') || document.getElementById('rider-search-source');
+        const latEl = document.getElementById('book-pickup-lat') || document.getElementById('seat-pickup-lat') || document.getElementById('local-taxi-pickup-lat');
+        const lngEl = document.getElementById('book-pickup-lng') || document.getElementById('seat-pickup-lng') || document.getElementById('local-taxi-pickup-lng');
+        if (txt) { txt.value = name; txt.dispatchEvent(new Event('input')); }
+        if (latEl) latEl.value = lat;
+        if (lngEl) lngEl.value = lng;
+    } else {
+        const txt = document.getElementById('book-dropoff') || document.getElementById('seat-dropoff') || document.getElementById('local-taxi-dropoff') || document.getElementById('rider-search-destination');
+        const latEl = document.getElementById('book-dropoff-lat') || document.getElementById('seat-dropoff-lat') || document.getElementById('local-taxi-dropoff-lat');
+        const lngEl = document.getElementById('book-dropoff-lng') || document.getElementById('seat-dropoff-lng') || document.getElementById('local-taxi-dropoff-lng');
+        if (txt) { txt.value = name; txt.dispatchEvent(new Event('input')); }
+        if (latEl) latEl.value = lat;
+        if (lngEl) lngEl.value = lng;
+    }
+    
+    // Trigger map update if instances exist!
+    if (bookingMapInstance) {
+        if (pickupMarker && targetType === 'pickup') {
+            pickupMarker.setLatLng([lat, lng]);
+        }
+        if (dropoffMarker && targetType === 'dropoff') {
+            dropoffMarker.setLatLng([lat, lng]);
+        }
+        if (pickupMarker && dropoffMarker) {
+            const group = new L.featureGroup([pickupMarker, dropoffMarker]);
+            bookingMapInstance.fitBounds(group.getBounds().pad(0.1));
+        }
+        updateFareQuote(document.getElementById('book-value').value);
+    }
+    
+    if (localTaxiBookingMapInstance) {
+        if (localTaxiPickupMarker && targetType === 'pickup') {
+            localTaxiPickupMarker.setLatLng([lat, lng]);
+        }
+        if (localTaxiDropoffMarker && targetType === 'dropoff') {
+            localTaxiDropoffMarker.setLatLng([lat, lng]);
+        }
+        if (localTaxiPickupMarker && localTaxiDropoffMarker) {
+            const group = new L.featureGroup([localTaxiPickupMarker, localTaxiDropoffMarker]);
+            localTaxiBookingMapInstance.fitBounds(group.getBounds().pad(0.1));
+        }
+        updateLocalTaxiQuote();
+    }
+    showToast(`Set ${targetType} to: ${name.split(',')[0]}`, 'success');
+};
+
+function renderCustomerProfile() {
+    return `
+        <div class="map-first-layout">
+            <div style="flex:1; padding:24px; overflow-y:auto; max-width: 600px; margin: 0 auto; width: 100%;">
+                <div class="hero-card" style="margin-bottom:20px; border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+                    <div style="display:flex; align-items:center; gap:20px;">
+                        <div style="width:64px; height:64px; background:var(--porter-gradient); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; color:white; box-shadow: var(--shadow-glow);">
+                            ${currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                        <div>
+                            <h2 style="font-size:22px; font-weight:800; color:var(--text-white); margin-bottom:4px;">${escapeHtml(currentUser.fullName)}</h2>
+                            <span class="user-role-badge" style="background:rgba(99,102,241,0.2); color:var(--primary); font-size:12px; font-weight:700; padding:4px 8px; border-radius:6px; border: 1px solid rgba(99,102,241,0.3);">${currentUser.role}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px;">
+                    <h3 style="font-size:15px; font-weight:800; color:var(--text-white); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+                        👤 Account Information
+                    </h3>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:13px;">
+                        <div>
+                            <div style="color:var(--text-muted); margin-bottom:4px;">Email Address</div>
+                            <div style="color:var(--text-white); font-weight:600;">${escapeHtml(currentUser.email)}</div>
+                        </div>
+                        <div>
+                            <div style="color:var(--text-muted); margin-bottom:4px;">Mobile Number</div>
+                            <div style="color:var(--text-white); font-weight:600;">${escapeHtml(currentUser.mobileNumber || 'N/A')}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="route-card" style="padding:20px; border-radius:16px; margin-bottom: 24px;">
+                    <h3 style="font-size:15px; font-weight:800; color:var(--text-white); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                        🛡️ Emergency Trusted Contacts
+                    </h3>
+                    <p style="color:var(--text-body); font-size:12px; margin-bottom:20px;">
+                        Register trusted contacts who will receive emergency tracking alerts when you trigger SOS or silent pings.
+                    </p>
+                    
+                    <div id="rider-contacts-container" style="margin-bottom:20px;">
+                        <div style="color:var(--text-muted); padding:10px; font-size:13px;">Loading emergency contacts...</div>
+                    </div>
+
+                    <div style="border-top:1px dashed var(--border); padding-top:20px;">
+                        <h4 style="font-size:13px; font-weight:700; color:var(--text-white); margin-bottom:12px;">Add Trusted Contact</h4>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+                            <div class="form-group">
+                                <label class="form-label" style="font-size:11px;">Full Name</label>
+                                <input type="text" id="rider-contact-name" class="form-control" style="padding-left:12px;" placeholder="Name" required />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="font-size:11px;">Phone Number</label>
+                                <input type="text" id="rider-contact-phone" class="form-control" style="padding-left:12px;" placeholder="10-digit Mobile" required />
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom:16px;">
+                            <label class="form-label" style="font-size:11px;">Relationship</label>
+                            <input type="text" id="rider-contact-relationship" class="form-control" style="padding-left:12px;" placeholder="e.g. Spouse, Parent, Friend" required />
+                        </div>
+                        <button class="btn-search" style="width:100%; border:none; background: var(--porter-gradient);" onclick="addTrustedContactBtn()">
+                            ➕ Save Trusted Contact
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+let customerMapInstance = null;
+window.initCustomerMap = function() {
+    const mapDiv = document.getElementById('customer-map');
+    if (!mapDiv) return;
+
+    if (customerMapInstance) {
+        try {
+            customerMapInstance.remove();
+        } catch (e) {
+            console.error("Error removing customer map:", e);
+        }
+        customerMapInstance = null;
+    }
+
+    try {
+        customerMapInstance = L.map('customer-map', { zoomControl: false }).setView([12.9716, 77.5946], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(customerMapInstance);
+
+        L.control.zoom({ position: 'topright' }).addTo(customerMapInstance);
+    } catch (err) {
+        console.error('Failed to init customer map', err);
+    }
+};
 

@@ -1,5 +1,5 @@
 /* Premium Consumer Application Design System — BlaBlaCar + Porter Experience */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 
 :root {
     --bg-main: #090d16;
@@ -1310,4 +1310,355 @@ body.modal-open {
     line-height: 1.4 !important;
     white-space: normal !important;
     word-break: break-word !important;
+}
+
+/* Custom Customer Redesign Classes */
+.customer-theme {
+    --primary: #6366F1;
+    --primary-gradient: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+    --primary-glow: rgba(99, 102, 241, 0.4);
+    
+    --porter-teal: #F43F5E;
+    --porter-gradient: linear-gradient(135deg, #FB7185 0%, #F43F5E 100%);
+    
+    font-family: 'Outfit', sans-serif !important;
+}
+
+.customer-theme * {
+    font-family: 'Outfit', sans-serif !important;
+}
+
+@keyframes sheetFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes sheetSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+/* Sliding Bottom Sheet Style */
+.bottom-sheet-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(4, 6, 12, 0.6);
+    backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.bottom-sheet-backdrop.show {
+    opacity: 1;
+    pointer-events: auto;
+    animation: sheetFadeIn 0.25s ease-out forwards;
+}
+
+.bottom-sheet {
+    width: 100%;
+    max-width: 540px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 28px 28px 0 0;
+    padding: 24px;
+    box-shadow: 0 -15px 40px rgba(0, 0, 0, 0.4);
+    transform: translateY(100%);
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+.bottom-sheet-backdrop.show .bottom-sheet {
+    transform: translateY(0);
+    animation: sheetSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bottom-sheet-drag-handle {
+    width: 44px;
+    height: 5px;
+    background: var(--text-muted);
+    border-radius: 4px;
+    margin: -12px auto 20px auto;
+    opacity: 0.5;
+}
+
+.bottom-sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.bottom-sheet-header h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-white);
+}
+
+/* Bottom Navigation Bar Styles */
+.bottom-nav-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 72px;
+    background: rgba(18, 24, 38, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding-bottom: env(safe-area-inset-bottom);
+    z-index: 9999;
+}
+
+.bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    gap: 4px;
+    transition: var(--transition);
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+}
+
+.bottom-nav-item:hover {
+    color: var(--text-white);
+}
+
+.bottom-nav-item.active {
+    color: var(--porter-teal);
+}
+
+.bottom-nav-item .nav-icon {
+    font-size: 20px;
+    transition: transform 0.2s ease;
+}
+
+.bottom-nav-item.active .nav-icon {
+    transform: scale(1.15);
+}
+
+/* Map-First Layout styles */
+.map-first-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding-bottom: 72px; /* space for bottom nav bar */
+    position: relative;
+    overflow: hidden;
+}
+
+.map-first-header {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    right: 16px;
+    z-index: 1000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+}
+
+.map-first-header * {
+    pointer-events: auto;
+}
+
+.map-first-logo {
+    font-size: 18px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--porter-teal) 0%, var(--primary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    padding: 10px 16px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+}
+
+.map-first-container {
+    flex: 1;
+    position: relative;
+}
+
+.map-first-map {
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+.map-first-panel {
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    border-radius: 28px 28px 0 0;
+    padding: 24px;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.4);
+    z-index: 10;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+/* Recent and Saved Locations styles */
+.recent-locations-container {
+    margin-bottom: 20px;
+}
+
+.recent-locations-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.recent-locations-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.recent-location-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.recent-location-item:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--porter-teal);
+    transform: translateY(-1px);
+}
+
+.recent-location-icon {
+    font-size: 16px;
+    color: var(--porter-teal);
+    background: rgba(244, 63, 94, 0.1);
+    padding: 8px;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.recent-location-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.recent-location-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-white);
+}
+
+.recent-location-address {
+    font-size: 11px;
+    color: var(--text-body);
+}
+
+/* Responsive adjustment for desktop split screen view */
+@media (min-width: 769px) {
+    .map-first-layout {
+        flex-direction: row;
+        padding-bottom: 0;
+        padding-left: 72px; /* persistent sidebar instead of bottom nav */
+    }
+    
+    .bottom-nav-bar {
+        left: 0;
+        right: auto;
+        top: 0;
+        bottom: 0;
+        width: 72px;
+        height: 100vh;
+        flex-direction: column;
+        justify-content: flex-start;
+        padding-top: 40px;
+        padding-bottom: 40px;
+        border-top: none;
+        border-right: 1px solid var(--border);
+        gap: 20px;
+    }
+    
+    .map-first-container {
+        order: 2;
+    }
+    
+    .map-first-panel {
+        order: 1;
+        width: 420px;
+        height: 100vh;
+        max-height: 100vh;
+        border-top: none;
+        border-right: 1px solid var(--border);
+        border-radius: 0;
+        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.4);
+    }
+}
+
+/* Custom Leaflet tooltip and popup styles for pill design */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+    background: var(--bg-surface) !important;
+    color: var(--text-white) !important;
+    border: 1px solid var(--primary) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+    border-radius: 20px !important;
+}
+
+.leaflet-popup-content {
+    margin: 8px 12px !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+}
+
+.leaflet-popup-close-button {
+    color: var(--text-muted) !important;
+    padding: 4px !important;
+}
+
+.leaflet-tooltip {
+    background: var(--bg-surface) !important;
+    color: var(--text-white) !important;
+    border: 1px solid var(--primary) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+    border-radius: 20px !important;
+    padding: 4px 10px !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+}
+
+body.modal-open {
+    overflow: hidden !important;
 }
