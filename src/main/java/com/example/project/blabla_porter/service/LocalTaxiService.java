@@ -5,9 +5,11 @@ import com.example.project.blabla_porter.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Map;
 import java.util.Optional;
 
@@ -32,11 +34,17 @@ public class LocalTaxiService {
     @Autowired
     private RideRequestRepository rideRequestRepository;
 
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    @Autowired
+    private NotificationService notificationService;
+
     @Transactional
     public LocalCaptainStatus toggleAvailability(Long captainId, boolean available, Double latitude, Double longitude) {
         User user = userRepository.findById(captainId)
                 .orElseThrow(() -> new RuntimeException("Captain not found"));
-        if (user.getRole() != User.UserRole.TRAVELER) {
+        if (!user.getCapabilities().contains(User.UserRole.TRAVELER)) {
             throw new IllegalArgumentException("Only Captains can toggle local availability");
         }
 
@@ -113,7 +121,21 @@ public class LocalTaxiService {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        return taxiBookingRepository.save(booking);
+        LocalTaxiBooking saved = taxiBookingRepository.save(booking);
+
+        // Trigger FCM push notification to the nearest Captain
+        try {
+            notificationService.sendPushToUser(
+                    nearestCaptain.getCaptainId(),
+                    "New Local Taxi Request",
+                    "You have a new local taxi booking request from " + pickupLocation + " to " + dropoffLocation + ".",
+                    Map.of("type", "NEW_TAXI_REQUEST", "bookingId", String.valueOf(saved.getId()))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push to captain in bookTaxi: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     @Transactional
@@ -290,7 +312,42 @@ public class LocalTaxiService {
             }
         }
 
-        return taxiBookingRepository.save(booking);
+        LocalTaxiBooking saved = taxiBookingRepository.save(booking);
+
+        // Broadcast status update
+        if (saved.getTripId() != null) {
+            try {
+                messagingTemplate.convertAndSend("/topic/trip/" + saved.getTripId(), saved);
+            } catch (Exception e) {
+                System.err.println("Failed to broadcast WebSocket update on updateBookingStatus: " + e.getMessage());
+            }
+        }
+
+        // Trigger FCM push notification to rider
+        try {
+            String title = "Local Taxi Booking Update";
+            String body = "";
+            if (newStatus == LocalTaxiBookingStatus.IN_PROGRESS) {
+                body = "Your taxi ride has started! Enjoy the trip.";
+            } else if (newStatus == LocalTaxiBookingStatus.COMPLETED) {
+                body = "Your taxi ride is completed. Thank you for using BlaBla+Porter!";
+            } else if (newStatus == LocalTaxiBookingStatus.CANCELLED) {
+                body = "Your taxi ride has been cancelled.";
+            }
+
+            if (!body.isEmpty()) {
+                notificationService.sendPushToUser(
+                        saved.getRiderId(),
+                        title,
+                        body,
+                        Map.of("type", "TAXI_STATUS", "bookingId", String.valueOf(bookingId), "status", newStatus.name())
+                );
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on updateBookingStatus: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     public List<LocalTaxiBooking> getRiderBookings(Long riderId) {

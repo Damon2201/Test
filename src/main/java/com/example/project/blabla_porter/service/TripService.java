@@ -26,12 +26,13 @@ public class TripService {
         User traveler = userRepository.findById(req.getTravelerId())
                 .orElseThrow(() -> new RuntimeException("Traveler not found with id: " + req.getTravelerId()));
 
-        if (traveler.getRole() != User.UserRole.TRAVELER) {
-            throw new IllegalArgumentException("User must have TRAVELER role to declare a trip!");
-        }
-
-        if (traveler.getKycStatus() != User.KycStatus.APPROVED) {
-            throw new IllegalStateException("Traveler KYC must be APPROVED before registering trips!");
+        if (!traveler.getCapabilities().contains(User.UserRole.TRAVELER)) {
+            if (traveler.getRole() != User.UserRole.TRAVELER) {
+                throw new IllegalArgumentException("User must have TRAVELER role to declare a trip!");
+            }
+            if (traveler.getKycStatus() != User.KycStatus.APPROVED) {
+                throw new IllegalStateException("Traveler KYC must be APPROVED before registering trips!");
+            }
         }
 
         Trip trip = Trip.builder()

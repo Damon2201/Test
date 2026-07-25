@@ -40,10 +40,12 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
             Claims claims = jwtService.validateTokenAndGetClaims(token);
             Long userId = Long.parseLong(claims.getSubject());
             User.UserRole role = User.UserRole.valueOf(claims.get("role", String.class));
+            java.util.Set<User.UserRole> capabilities = jwtService.extractCapabilities(token);
 
             // Server-side context binding: never trust user id or role passed directly in request body or query params
             request.setAttribute("authenticatedUserId", userId);
             request.setAttribute("authenticatedUserRole", role);
+            request.setAttribute("authenticatedUserCapabilities", capabilities);
 
             // Annotation-based role guard: read @RequireRole from the target controller method
             if (handler instanceof HandlerMethod) {
@@ -52,13 +54,20 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
 
                 if (requireRole != null) {
                     User.UserRole[] allowedRoles = requireRole.value();
-                    if (!Arrays.asList(allowedRoles).contains(role)) {
-                        log.warn("Security Alert: User {} with role {} was denied access to URI '{}'. Required roles: {}",
-                                userId, role, request.getRequestURI(), Arrays.toString(allowedRoles));
+                    boolean hasAccess = false;
+                    for (User.UserRole allowed : allowedRoles) {
+                        if (capabilities.contains(allowed)) {
+                            hasAccess = true;
+                            break;
+                        }
+                    }
+                    if (!hasAccess) {
+                        log.warn("Security Alert: User {} with capabilities {} was denied access to URI '{}'. Required roles: {}",
+                                userId, capabilities, request.getRequestURI(), Arrays.toString(allowedRoles));
                         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                         response.setContentType("application/json");
-                        response.getWriter().write("{\"error\": \"Forbidden: Access denied for role "
-                                + role + ". Required: " + Arrays.toString(allowedRoles) + "\"}");
+                        response.getWriter().write("{\"error\": \"Forbidden: Access denied for capabilities "
+                                + capabilities + ". Required: " + Arrays.toString(allowedRoles) + "\"}");
                         return false;
                     }
                 }

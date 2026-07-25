@@ -4,11 +4,13 @@ import com.example.project.blabla_porter.dto.RideBookingRequest;
 import com.example.project.blabla_porter.model.*;
 import com.example.project.blabla_porter.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class RideService {
@@ -33,6 +35,12 @@ public class RideService {
 
     @Autowired
     private SmsService smsService;
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @org.springframework.beans.factory.annotation.Value("${razorpay.key.id:}")
     private String razorpayKeyId;
@@ -124,7 +132,30 @@ public class RideService {
         }
 
         ride.setStatus(RideRequest.RideStatus.ACCEPTED);
-        return rideRequestRepository.save(ride);
+        RideRequest saved = rideRequestRepository.save(ride);
+
+        // Broadcast to WebSocket subscribers
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + ride.getTripId(), saved);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on acceptRide: " + e.getMessage());
+        }
+
+        // Trigger FCM push notification to rider
+        try {
+            User traveler = userRepository.findById(travelerId).orElse(null);
+            String captainName = traveler != null ? traveler.getFullName() : "Your Captain";
+            notificationService.sendPushToUser(
+                    ride.getRiderId(),
+                    "Ride Confirmed",
+                    "Captain " + captainName + " has accepted your ride request.",
+                    Map.of("type", "RIDE_ACCEPTED", "rideId", String.valueOf(rideRequestId))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on acceptRide: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     public RideRequest startRide(Long rideRequestId) {
@@ -134,7 +165,28 @@ public class RideService {
         }
 
         ride.setStatus(RideRequest.RideStatus.IN_PROGRESS);
-        return rideRequestRepository.save(ride);
+        RideRequest saved = rideRequestRepository.save(ride);
+
+        // Broadcast to WebSocket subscribers
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + ride.getTripId(), saved);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on startRide: " + e.getMessage());
+        }
+
+        // Trigger FCM push notification to rider
+        try {
+            notificationService.sendPushToUser(
+                    ride.getRiderId(),
+                    "Ride Started",
+                    "Your ride is now in progress.",
+                    Map.of("type", "RIDE_STARTED", "rideId", String.valueOf(rideRequestId))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on startRide: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     @Transactional
@@ -145,6 +197,7 @@ public class RideService {
         }
 
         ride.setStatus(RideRequest.RideStatus.COMPLETED);
+        RideRequest saved = rideRequestRepository.save(ride);
 
         // Release Escrow Payment if exists
         paymentRepository.findByRideRequestId(rideRequestId).ifPresent(payment -> {
@@ -162,7 +215,26 @@ public class RideService {
             }
         }
 
-        return rideRequestRepository.save(ride);
+        // Broadcast to WebSocket subscribers
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + ride.getTripId(), saved);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on completeRide: " + e.getMessage());
+        }
+
+        // Trigger FCM push notification to rider
+        try {
+            notificationService.sendPushToUser(
+                    ride.getRiderId(),
+                    "Ride Completed",
+                    "You have arrived at your destination.",
+                    Map.of("type", "RIDE_COMPLETED", "rideId", String.valueOf(rideRequestId))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on completeRide: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     @Transactional
@@ -266,7 +338,7 @@ public class RideService {
         ride.setRazorpayOrderId(req.getRazorpayOrderId());
         ride.setRazorpayPaymentId(req.getRazorpayPaymentId());
         ride.setRazorpaySignature(req.getRazorpaySignature());
-        rideRequestRepository.save(ride);
+        RideRequest savedRide = rideRequestRepository.save(ride);
 
         Payment payment = Payment.builder()
                 .rideRequestId(rideRequestId)
@@ -279,7 +351,30 @@ public class RideService {
                 .razorpaySignature(req.getRazorpaySignature())
                 .build();
 
-        return paymentRepository.save(payment);
+        Payment savedPayment = paymentRepository.save(payment);
+
+        // Broadcast updated ride state to WebSocket subscribers
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + ride.getTripId(), savedRide);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on verifyRazorpayPayment: " + e.getMessage());
+        }
+
+        // Trigger FCM push notification to traveler (Captain)
+        try {
+            User rider = userRepository.findById(req.getSenderId()).orElse(null);
+            String riderName = rider != null ? rider.getFullName() : "A rider";
+            notificationService.sendPushToUser(
+                    trip.getTravelerId(),
+                    "Ride Booking Confirmed & Paid",
+                    "Rider " + riderName + " has confirmed and paid for Ride #" + rideRequestId + ".",
+                    Map.of("type", "PAYMENT_CONFIRMED", "rideId", String.valueOf(rideRequestId))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on verifyRazorpayPayment: " + e.getMessage());
+        }
+
+        return savedPayment;
     }
 
     @Transactional

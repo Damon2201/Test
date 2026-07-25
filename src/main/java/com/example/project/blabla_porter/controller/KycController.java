@@ -18,7 +18,7 @@ public class KycController {
     private UserService userService;
 
     @PostMapping("/submit")
-    @RequireRole(User.UserRole.TRAVELER)
+    @RequireRole({User.UserRole.TRAVELER, User.UserRole.SENDER, User.UserRole.RIDER})
     public User submitKyc(@Valid @RequestBody KycSubmitRequest request) {
         return userService.submitKyc(request);
     }

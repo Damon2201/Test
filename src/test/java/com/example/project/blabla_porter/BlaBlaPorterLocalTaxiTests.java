@@ -97,12 +97,14 @@ public class BlaBlaPorterLocalTaxiTests {
                 .fullName("Close Captain")
                 .mobileNumber("9876543288")
                 .role(User.UserRole.TRAVELER)
+                .kycStatus(User.KycStatus.APPROVED)
                 .build());
 
         User farCap = userRepository.save(User.builder()
                 .fullName("Far Captain")
                 .mobileNumber("9876543299")
                 .role(User.UserRole.TRAVELER)
+                .kycStatus(User.KycStatus.APPROVED)
                 .build());
 
         // Toggle both online
@@ -134,6 +136,7 @@ public class BlaBlaPorterLocalTaxiTests {
                 .fullName("Bob Captain")
                 .mobileNumber("9876543211")
                 .role(User.UserRole.TRAVELER)
+                .kycStatus(User.KycStatus.APPROVED)
                 .build());
 
         localTaxiService.toggleAvailability(captain.getId(), true, 12.9352, 77.6245);
@@ -224,6 +227,7 @@ public class BlaBlaPorterLocalTaxiTests {
                 .fullName("Close Captain")
                 .mobileNumber("9876543281")
                 .role(User.UserRole.TRAVELER)
+                .kycStatus(User.KycStatus.APPROVED)
                 .build());
         localTaxiService.toggleAvailability(closeCap.getId(), true, 12.9300, 77.6200);
 
@@ -232,6 +236,7 @@ public class BlaBlaPorterLocalTaxiTests {
                 .fullName("Medium Captain")
                 .mobileNumber("9876543282")
                 .role(User.UserRole.TRAVELER)
+                .kycStatus(User.KycStatus.APPROVED)
                 .build());
         localTaxiService.toggleAvailability(mediumCap.getId(), true, 12.9500, 77.6500);
 
@@ -240,6 +245,7 @@ public class BlaBlaPorterLocalTaxiTests {
                 .fullName("Far Captain")
                 .mobileNumber("9876543283")
                 .role(User.UserRole.TRAVELER)
+                .kycStatus(User.KycStatus.APPROVED)
                 .build());
         localTaxiService.toggleAvailability(farCap.getId(), true, 13.5000, 77.9000);
 

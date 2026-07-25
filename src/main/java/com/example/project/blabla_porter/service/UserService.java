@@ -13,6 +13,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class UserService {
@@ -24,6 +25,9 @@ public class UserService {
 
     @Autowired
     private TrustedContactRepository trustedContactRepository;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Autowired
     private JwtService jwtService;
@@ -89,6 +93,7 @@ public class UserService {
                 .mobileNumber(user.getMobileNumber())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .capabilities(user.getCapabilities())
                 .kycStatus(user.getKycStatus())
                 .build();
     }
@@ -119,6 +124,7 @@ public class UserService {
                 .mobileNumber(user.getMobileNumber())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .capabilities(user.getCapabilities())
                 .kycStatus(user.getKycStatus())
                 .build();
     }
@@ -134,8 +140,12 @@ public class UserService {
 
     public User submitKyc(KycSubmitRequest req) {
         User user = getById(req.getUserId());
+        if (user.getRole() == User.UserRole.ADMIN) {
+            throw new IllegalArgumentException("Admins cannot submit KYC!");
+        }
+
         if (user.getRole() != User.UserRole.TRAVELER) {
-            throw new IllegalArgumentException("Only Travelers / Captains require KYC verification!");
+            user.setRole(User.UserRole.TRAVELER);
         }
 
         if (req.getAadhaarNumber() == null || req.getAadhaarNumber().isBlank() ||
@@ -157,7 +167,20 @@ public class UserService {
     public User approveKyc(Long userId) {
         User user = getById(userId);
         user.setKycStatus(User.KycStatus.APPROVED);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+
+        try {
+            notificationService.sendPushToUser(
+                    userId,
+                    "KYC Approved",
+                    "Your KYC verification is approved! You are now a Captain.",
+                    Map.of("type", "KYC_STATUS", "status", "APPROVED")
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on approveKyc: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     public List<User> getPendingKycUsers() {
@@ -170,7 +193,22 @@ public class UserService {
             throw new IllegalStateException("User is not in PENDING_APPROVAL status! Current status: " + user.getKycStatus());
         }
         user.setKycStatus(approved ? User.KycStatus.APPROVED : User.KycStatus.REJECTED);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+
+        try {
+            String statusStr = approved ? "APPROVED" : "REJECTED";
+            String msg = approved ? "Your KYC verification is approved! You are now a Captain." : "Your KYC verification was rejected. Please check your documents.";
+            notificationService.sendPushToUser(
+                    userId,
+                    "KYC Status Update",
+                    msg,
+                    Map.of("type", "KYC_STATUS", "status", statusStr)
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on reviewKyc: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     public TrustedContact addTrustedContact(Long userId, String contactName, String contactPhoneNumber, String relationship) {

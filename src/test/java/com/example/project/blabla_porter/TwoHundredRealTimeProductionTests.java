@@ -171,13 +171,17 @@ public class TwoHundredRealTimeProductionTests {
         KycSubmitRequest kyc = createSampleKyc(cap.getId());
         assertEquals(User.KycStatus.PENDING_APPROVAL, userService.submitKyc(kyc).getKycStatus());
     }
-    @Test void test022_submitKyc_riderRole_throwsIllegalArgumentException() {
+    @Test void test022_submitKyc_riderRole_succeedsAndChangesRole() {
         KycSubmitRequest kyc = createSampleKyc(rider.getId());
-        assertThrows(IllegalArgumentException.class, () -> userService.submitKyc(kyc));
+        User u = userService.submitKyc(kyc);
+        assertEquals(User.UserRole.TRAVELER, u.getRole());
+        assertEquals(User.KycStatus.PENDING_APPROVAL, u.getKycStatus());
     }
-    @Test void test023_submitKyc_senderRole_throwsIllegalArgumentException() {
+    @Test void test023_submitKyc_senderRole_succeedsAndChangesRole() {
         KycSubmitRequest kyc = createSampleKyc(sender.getId());
-        assertThrows(IllegalArgumentException.class, () -> userService.submitKyc(kyc));
+        User u = userService.submitKyc(kyc);
+        assertEquals(User.UserRole.TRAVELER, u.getRole());
+        assertEquals(User.KycStatus.PENDING_APPROVAL, u.getKycStatus());
     }
     @Test void test024_submitKyc_adminRole_throwsIllegalArgumentException() {
         RegisterRequest r = new RegisterRequest(); r.setFullName("Admin24"); r.setMobileNumber("9900000024"); r.setRole(User.UserRole.ADMIN);

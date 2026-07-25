@@ -3,6 +3,7 @@ package com.example.project.blabla_porter;
 import com.example.project.blabla_porter.dto.AuthResponse;
 import com.example.project.blabla_porter.dto.LoginRequest;
 import com.example.project.blabla_porter.dto.RegisterRequest;
+import com.example.project.blabla_porter.dto.KycSubmitRequest;
 import com.example.project.blabla_porter.model.User;
 import com.example.project.blabla_porter.repository.UserRepository;
 import com.example.project.blabla_porter.service.JwtService;
@@ -170,5 +171,69 @@ public class RealAuthenticationTest {
 
         // Check verification does not fail on valid token
         assertNotNull(refreshTokenService.verifyExpiration(dbToken));
+    }
+
+    @Test
+    @DisplayName("Verify multi-capability roles and capability extraction in JWT")
+    void testMultiCapabilitySecurity() {
+        // 1. Sender gets SENDER + RIDER
+        RegisterRequest senderReq = new RegisterRequest();
+        senderReq.setFullName("Stefan Sender");
+        senderReq.setMobileNumber("9990008881");
+        senderReq.setRole(User.UserRole.SENDER);
+        senderReq.setPassword("Password123");
+        User sender = userService.register(senderReq);
+        
+        java.util.Set<User.UserRole> senderCaps = sender.getCapabilities();
+        assertTrue(senderCaps.contains(User.UserRole.SENDER));
+        assertTrue(senderCaps.contains(User.UserRole.RIDER));
+        assertFalse(senderCaps.contains(User.UserRole.TRAVELER));
+        assertFalse(senderCaps.contains(User.UserRole.ADMIN));
+
+        AuthResponse loginResp = userService.login(new LoginRequest("9990008881", "Password123"));
+        java.util.Set<User.UserRole> jwtCaps = jwtService.extractCapabilities(loginResp.getToken());
+        assertTrue(jwtCaps.contains(User.UserRole.SENDER));
+        assertTrue(jwtCaps.contains(User.UserRole.RIDER));
+
+        // 2. Traveler without approved KYC gets SENDER + RIDER (cannot do TRAVELER activities yet)
+        RegisterRequest travelerReq = new RegisterRequest();
+        travelerReq.setFullName("Damon Traveler");
+        travelerReq.setMobileNumber("9990008882");
+        travelerReq.setRole(User.UserRole.TRAVELER);
+        travelerReq.setPassword("Password123");
+        User traveler = userService.register(travelerReq);
+
+        java.util.Set<User.UserRole> travelerCapsPending = traveler.getCapabilities();
+        assertTrue(travelerCapsPending.contains(User.UserRole.SENDER));
+        assertTrue(travelerCapsPending.contains(User.UserRole.RIDER));
+        assertFalse(travelerCapsPending.contains(User.UserRole.TRAVELER));
+
+        // 3. Traveler with approved KYC gets SENDER + RIDER + TRAVELER
+        KycSubmitRequest kycReq = new KycSubmitRequest();
+        kycReq.setUserId(traveler.getId());
+        kycReq.setAadhaarNumber("1111-2222-3333");
+        kycReq.setPanNumber("PAN123456F");
+        kycReq.setDrivingLicenceNumber("DL-12345");
+        kycReq.setRcNumber("RC-12345");
+        userService.submitKyc(kycReq);
+        
+        User travelerApproved = userService.reviewKyc(traveler.getId(), true);
+        java.util.Set<User.UserRole> travelerCapsApproved = travelerApproved.getCapabilities();
+        assertTrue(travelerCapsApproved.contains(User.UserRole.SENDER));
+        assertTrue(travelerCapsApproved.contains(User.UserRole.RIDER));
+        assertTrue(travelerCapsApproved.contains(User.UserRole.TRAVELER));
+
+        // 4. Admin gets only ADMIN
+        RegisterRequest adminReq = new RegisterRequest();
+        adminReq.setFullName("Admin User");
+        adminReq.setMobileNumber("9990008883");
+        adminReq.setRole(User.UserRole.ADMIN);
+        adminReq.setPassword("Password123");
+        User admin = userService.register(adminReq);
+
+        java.util.Set<User.UserRole> adminCaps = admin.getCapabilities();
+        assertTrue(adminCaps.contains(User.UserRole.ADMIN));
+        assertFalse(adminCaps.contains(User.UserRole.SENDER));
+        assertFalse(adminCaps.contains(User.UserRole.RIDER));
     }
 }

@@ -85,4 +85,18 @@ public class User {
             totalRatingsCount = 0;
         }
     }
+
+    public java.util.Set<UserRole> getCapabilities() {
+        java.util.Set<UserRole> caps = new java.util.HashSet<>();
+        if (this.role == UserRole.ADMIN) {
+            caps.add(UserRole.ADMIN);
+            return caps;
+        }
+        caps.add(UserRole.SENDER);
+        caps.add(UserRole.RIDER);
+        if (this.role == UserRole.TRAVELER && this.kycStatus == KycStatus.APPROVED) {
+            caps.add(UserRole.TRAVELER);
+        }
+        return caps;
+    }
 }

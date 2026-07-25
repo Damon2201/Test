@@ -29,9 +29,14 @@ public class JwtService {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + EXPIRATION_MS);
 
+        java.util.List<String> capabilities = user.getCapabilities().stream()
+                .map(Enum::name)
+                .collect(java.util.stream.Collectors.toList());
+
         return Jwts.builder()
                 .subject(String.valueOf(user.getId()))
                 .claim("role", user.getRole().name())
+                .claim("roles", capabilities)
                 .claim("mobileNumber", user.getMobileNumber())
                 .issuedAt(now)
                 .expiration(expiryDate)
@@ -55,5 +60,19 @@ public class JwtService {
     public User.UserRole extractRole(String token) {
         Claims claims = validateTokenAndGetClaims(token);
         return User.UserRole.valueOf(claims.get("role", String.class));
+    }
+
+    public java.util.Set<User.UserRole> extractCapabilities(String token) {
+        Claims claims = validateTokenAndGetClaims(token);
+        java.util.List<?> rolesList = claims.get("roles", java.util.List.class);
+        java.util.Set<User.UserRole> caps = new java.util.HashSet<>();
+        if (rolesList != null) {
+            for (Object r : rolesList) {
+                caps.add(User.UserRole.valueOf((String) r));
+            }
+        } else {
+            caps.add(User.UserRole.valueOf(claims.get("role", String.class)));
+        }
+        return caps;
     }
 }

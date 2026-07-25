@@ -167,16 +167,23 @@ public class FiftyHardcoreRealWorldTests {
     // =========================================================================
 
     @Test
-    @DisplayName("Test 06: Non-Traveler role submitting KYC throws IllegalArgumentException")
+    @DisplayName("Test 06: Submit KYC for user who is not a traveler throws IllegalArgumentException")
     void test06_submitKyc_nonTravelerRole_throwsIllegalArgumentException() {
+        RegisterRequest adminReq = new RegisterRequest();
+        adminReq.setFullName("System Admin");
+        adminReq.setMobileNumber("9995551111");
+        adminReq.setRole(User.UserRole.ADMIN);
+        adminReq.setPassword("Password123");
+        User admin = userService.register(adminReq);
+
         KycSubmitRequest kyc = new KycSubmitRequest();
-        kyc.setUserId(rider.getId());
+        kyc.setUserId(admin.getId());
         kyc.setAadhaarNumber("1111-1111-1111");
         kyc.setPanNumber("ABCDE1111F");
         kyc.setDrivingLicenceNumber("DL-111");
         kyc.setRcNumber("KA-01");
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> userService.submitKyc(kyc));
-        assertTrue(ex.getMessage().contains("Only Travelers / Captains require KYC"));
+        assertTrue(ex.getMessage().contains("Admins cannot submit KYC"));
     }
 
     @Test

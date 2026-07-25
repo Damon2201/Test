@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import com.razorpay.RazorpayClient;
 import com.razorpay.Order;
 import com.razorpay.Utils;
@@ -21,6 +22,7 @@ import org.json.JSONObject;
 
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class ParcelService {
@@ -49,6 +51,12 @@ public class ParcelService {
 
     @Autowired
     private com.example.project.blabla_porter.config.PricingConfig pricingConfig;
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    @Autowired
+    private NotificationService notificationService;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -183,7 +191,30 @@ public class ParcelService {
         }
 
         request.setStatus(ParcelRequest.ParcelStatus.ACCEPTED);
-        return parcelRequestRepository.save(request);
+        ParcelRequest saved = parcelRequestRepository.save(request);
+
+        // Broadcast status update
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + request.getTripId(), saved);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on acceptParcelRequest: " + e.getMessage());
+        }
+
+        // Trigger FCM push notification to sender
+        try {
+            User traveler = userRepository.findById(travelerId).orElse(null);
+            String captainName = traveler != null ? traveler.getFullName() : "Your Captain";
+            notificationService.sendPushToUser(
+                    request.getSenderId(),
+                    "Parcel Accepted",
+                    "Captain " + captainName + " has accepted your parcel booking request.",
+                    Map.of("type", "PARCEL_ACCEPTED", "parcelRequestId", String.valueOf(parcelRequestId))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on acceptParcelRequest: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     @Transactional
@@ -249,6 +280,25 @@ public class ParcelService {
             System.err.println("Failed to send delivery OTP SMS: " + e.getMessage());
         }
 
+        // Broadcast status update
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + saved.getTripId(), saved);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on verifyPickup: " + e.getMessage());
+        }
+
+        // Trigger FCM push notification to sender
+        try {
+            notificationService.sendPushToUser(
+                    saved.getSenderId(),
+                    "Parcel Picked Up",
+                    "Your parcel has been successfully handed over to the Captain.",
+                    Map.of("type", "PARCEL_PICKED_UP", "parcelRequestId", String.valueOf(saved.getId()))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on verifyPickup: " + e.getMessage());
+        }
+
         return saved;
     }
 
@@ -277,7 +327,28 @@ public class ParcelService {
         payment.setStatus(Payment.EscrowStatus.RELEASED);
         paymentRepository.save(payment);
 
-        return parcelRequestRepository.save(request);
+        ParcelRequest saved = parcelRequestRepository.save(request);
+
+        // Broadcast status update
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + saved.getTripId(), saved);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on verifyDelivery: " + e.getMessage());
+        }
+
+        // Trigger FCM push notification to sender
+        try {
+            notificationService.sendPushToUser(
+                    saved.getSenderId(),
+                    "Parcel Delivered",
+                    "Your parcel has been delivered successfully and payment has been released.",
+                    Map.of("type", "PARCEL_DELIVERED", "parcelRequestId", String.valueOf(saved.getId()))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on verifyDelivery: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     @Transactional
@@ -462,7 +533,7 @@ public class ParcelService {
         request.setPickupOtp(pickupOtp);
         request.setDeliveryOtp(deliveryOtp);
         request.setStatus(ParcelRequest.ParcelStatus.PAID_ESCROW);
-        parcelRequestRepository.save(request);
+        ParcelRequest savedParcel = parcelRequestRepository.save(request);
 
         // Send Pickup OTP to Sender
         try {
@@ -485,7 +556,30 @@ public class ParcelService {
                 .razorpaySignature(req.getRazorpaySignature())
                 .build();
 
-        return paymentRepository.save(payment);
+        Payment savedPayment = paymentRepository.save(payment);
+
+        // Broadcast updated parcel request status to WebSocket topic
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + request.getTripId(), savedParcel);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on verifyRazorpayPayment: " + e.getMessage());
+        }
+
+        // Trigger FCM push notification to traveler (Captain)
+        try {
+            User sender = userRepository.findById(request.getSenderId()).orElse(null);
+            String senderName = sender != null ? sender.getFullName() : "A sender";
+            notificationService.sendPushToUser(
+                    trip.getTravelerId(),
+                    "Parcel Payment Confirmed",
+                    "Sender " + senderName + " has verified payment for Parcel #" + parcelRequestId + ". Escrow secured.",
+                    Map.of("type", "PARCEL_PAID", "parcelRequestId", String.valueOf(parcelRequestId))
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to send FCM push on verifyRazorpayPayment: " + e.getMessage());
+        }
+
+        return savedPayment;
     }
 }
 

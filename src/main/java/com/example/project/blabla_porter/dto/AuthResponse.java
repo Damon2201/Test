@@ -18,5 +18,6 @@ public class AuthResponse {
     private String mobileNumber;
     private String email;
     private User.UserRole role;
+    private java.util.Set<User.UserRole> capabilities;
     private User.KycStatus kycStatus;
 }

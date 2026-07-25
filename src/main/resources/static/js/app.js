@@ -80,6 +80,276 @@ let telemetryMapInstance = null;
 let telemetryMarker = null;
 let usersCache = [];
 
+// ===== WebSocket STOMP & Geolocation State =====
+let stompClient = null;
+let socketConnected = false;
+let wsSubscriptions = {};
+let geolocationWatchId = null;
+let lastGpsBroadcastTime = 0;
+
+function initWebSocket() {
+    if (!currentUser || !currentUser.token) {
+        disconnectWebSocket();
+        return;
+    }
+    if (stompClient && stompClient.connected) {
+        return;
+    }
+
+    const socket = new SockJS('/ws');
+    stompClient = Stomp.over(socket);
+    stompClient.debug = null; // Disable excessive console logging
+
+    stompClient.connect({
+        Authorization: 'Bearer ' + currentUser.token
+    }, function (frame) {
+        socketConnected = true;
+        console.log('STOMP WebSockets connected!');
+        subscribeToActiveViews();
+    }, function (error) {
+        console.warn('STOMP WebSockets connection failed, retrying in 5 seconds...', error);
+        socketConnected = false;
+        setTimeout(initWebSocket, 5000);
+    });
+}
+
+function registerFcmDeviceTokenMock() {
+    if (!currentUser || !currentUser.token) return;
+    const stored = localStorage.getItem('fcm_token');
+    if (stored) return; // already registered
+
+    const token = 'fcm_token_mock_' + currentUser.id + '_' + Date.now();
+    localStorage.setItem('fcm_token', token);
+    fetch(`${API_BASE}/notifications/devices`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ fcmToken: token, deviceType: 'WEB' })
+    }).catch(e => console.error('Failed to register device token', e));
+}
+
+function disconnectWebSocket() {
+    unsubscribeAllViews();
+    if (stompClient) {
+        try {
+            stompClient.disconnect();
+        } catch (e) {}
+        stompClient = null;
+    }
+    socketConnected = false;
+}
+
+function subscribeToActiveViews() {
+    if (!stompClient || !stompClient.connected) return;
+
+    // 1. Live Chat Topic subscription
+    if (selectedParcelForChat) {
+        const chatTopic = `/topic/chat/${selectedParcelForChat.id}`;
+        if (!wsSubscriptions[chatTopic]) {
+            wsSubscriptions[chatTopic] = stompClient.subscribe(chatTopic, function (msg) {
+                const chatMsg = JSON.parse(msg.body);
+                appendIncomingChatMessage(chatMsg);
+            });
+        }
+    }
+
+    // 2. Live Tracking Topic subscription (parcel sender tracking view)
+    if (selectedParcelForTracking) {
+        const trackingTopic = `/topic/tracking/${selectedParcelForTracking.tripId}`;
+        if (!wsSubscriptions[trackingTopic]) {
+            wsSubscriptions[trackingTopic] = stompClient.subscribe(trackingTopic, function (msg) {
+                const tracking = JSON.parse(msg.body);
+                updateLiveTrackingUI(tracking, selectedParcelForTracking);
+            });
+        }
+    }
+
+    // 3. Live Tracking and Trip Status subscription (rider seat booking tracking view)
+    if (selectedRideForTracking) {
+        const trackingTopic = `/topic/tracking/${selectedRideForTracking.tripId}`;
+        if (!wsSubscriptions[trackingTopic]) {
+            wsSubscriptions[trackingTopic] = stompClient.subscribe(trackingTopic, function (msg) {
+                const tracking = JSON.parse(msg.body);
+                updateRideTrackingUI(tracking, selectedRideForTracking);
+            });
+        }
+
+        const tripTopic = `/topic/trip/${selectedRideForTracking.tripId}`;
+        if (!wsSubscriptions[tripTopic]) {
+            wsSubscriptions[tripTopic] = stompClient.subscribe(tripTopic, function (msg) {
+                const updatedObj = JSON.parse(msg.body);
+                handleWebSocketTripStatusUpdate(updatedObj);
+            });
+        }
+    }
+}
+
+function unsubscribeAllViews() {
+    for (let topic in wsSubscriptions) {
+        if (wsSubscriptions[topic]) {
+            try {
+                wsSubscriptions[topic].unsubscribe();
+            } catch (e) {}
+        }
+    }
+    wsSubscriptions = {};
+}
+
+// Helper to append a new message in real time to the open chat box
+function appendIncomingChatMessage(chatMsg) {
+    const list = document.getElementById('chat-messages-list');
+    if (!list) return;
+
+    // Avoid duplicating message if already added locally
+    const exists = Array.from(list.children).some(el => el.getAttribute('data-msg-id') === String(chatMsg.id));
+    if (exists) return;
+
+    const li = document.createElement('li');
+    li.setAttribute('data-msg-id', chatMsg.id);
+    const isMe = chatMsg.senderUserId === currentUser.id;
+    li.className = isMe ? 'me' : 'other';
+    li.innerHTML = `
+        <div class="message-meta">${isMe ? 'You' : getUserName(chatMsg.senderUserId)} • ${new Date(chatMsg.sentAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+        <div class="message-bubble">${escapeHtml(chatMsg.message)}</div>
+    `;
+    list.appendChild(li);
+    list.scrollTop = list.scrollHeight;
+}
+
+// Handle real-time booking status change via WebSockets
+function handleWebSocketTripStatusUpdate(updatedObj) {
+    if (!selectedRideForTracking) return;
+
+    // Update status display on tracking modal in real-time
+    const statusEl = document.getElementById('ride-tracking-status');
+    if (statusEl) {
+        statusEl.textContent = updatedObj.status;
+    }
+    showToast(`Ride Status Updated: ${updatedObj.status}`, 'info');
+
+    // Refresh underlying state
+    if (currentUser.role === 'RIDER') {
+        fetchRidesForRider();
+    } else if (currentUser.role === 'TRAVELER') {
+        fetchCaptainLocalBookings();
+    }
+}
+
+// ===== Geolocation watchPosition Continuous Tracking Loop =====
+function startDeviceGpsTracking(tripId = null) {
+    if (geolocationWatchId) {
+        navigator.geolocation.clearWatch(geolocationWatchId);
+        geolocationWatchId = null;
+    }
+
+    if (!navigator.geolocation) {
+        showToast('Browser geolocation is not supported. Using manual backup.', 'error');
+        return;
+    }
+
+    updateGpsIndicator(true);
+
+    geolocationWatchId = navigator.geolocation.watchPosition(
+        async (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const speed = position.coords.speed || 0.0;
+            const heading = position.coords.heading || 0.0;
+
+            // Fill manual forms automatically if they are visible
+            const latEl = document.getElementById('local-gps-lat');
+            const lngEl = document.getElementById('local-gps-lng');
+            if (latEl) latEl.value = lat.toFixed(6);
+            if (lngEl) lngEl.value = lng.toFixed(6);
+
+            const gpsLat = document.getElementById('gps-lat');
+            const gpsLng = document.getElementById('gps-lng');
+            if (gpsLat) gpsLat.value = lat.toFixed(6);
+            if (gpsLng) gpsLng.value = lng.toFixed(6);
+
+            const now = Date.now();
+            // Throttle transmissions to every 8 seconds or on meaningful movement
+            if (now - lastGpsBroadcastTime > 8000) {
+                lastGpsBroadcastTime = now;
+
+                if (!tripId) {
+                    // Updating online location status for Local Taxi Captain
+                    await fetch(`${API_BASE}/taxi/captain/status?captainId=${currentUser.id}&available=true&latitude=${lat}&longitude=${lng}`, {
+                        method: 'POST',
+                        headers: getAuthHeaders()
+                    });
+                } else {
+                    // Send specific Trip coordinate ping
+                    const payload = {
+                        tripId: tripId,
+                        travelerId: currentUser.id,
+                        latitude: lat,
+                        longitude: lng,
+                        speedKmh: speed * 3.6, // m/s to km/h conversion
+                        headingDegrees: heading,
+                        batteryLevel: 100
+                    };
+
+                    if (stompClient && stompClient.connected) {
+                        stompClient.send("/app/ping", {}, JSON.stringify(payload));
+                    } else {
+                        // Fallback to REST
+                        await fetch(`${API_BASE}/tracking/ping`, {
+                            method: 'POST',
+                            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                    }
+                }
+            }
+        },
+        (error) => {
+            console.error("GPS Watch failed: ", error);
+            showToast('GPS permission denied or timed out. Manual input mode active.', 'error');
+            stopDeviceGpsTracking();
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+function stopDeviceGpsTracking() {
+    if (geolocationWatchId) {
+        navigator.geolocation.clearWatch(geolocationWatchId);
+        geolocationWatchId = null;
+    }
+    updateGpsIndicator(false);
+}
+
+function updateGpsIndicator(active) {
+    let banner = document.getElementById('gps-sharing-banner');
+    if (active) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'gps-sharing-banner';
+            banner.className = 'gps-sharing-banner';
+            banner.innerHTML = `
+                <div class="gps-pulse"></div>
+                <span>🔴 Live GPS Sharing Active</span>
+                <button onclick="stopDeviceGpsTracking(); toggleLocalTaxiAvailabilityBtn(false);" class="gps-stop-btn">Go Offline</button>
+            `;
+            document.body.appendChild(banner);
+        }
+    } else {
+        if (banner) banner.remove();
+    }
+}
+
+// Fallback test simulation method
+window.simulateWebSocketDisconnect = function() {
+    if (stompClient) {
+        try {
+            stompClient.disconnect();
+        } catch (e) {}
+        stompClient = null;
+    }
+    socketConnected = false;
+    showToast('Simulated WebSocket disconnect. Falling back to HTTP polling.', 'warning');
+};
+
 // ===== Live Tracking Animation Utilities =====
 function createCaptainLiveIcon() {
     return L.divIcon({
@@ -159,6 +429,8 @@ function getUserName(userId) {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadUserSession();
+    initWebSocket();
+    registerFcmDeviceTokenMock();
     renderApp();
 });
 
@@ -188,6 +460,20 @@ function getAuthHeaders() {
 }
 
 function logout() {
+    // Unregister FCM device token if stored
+    const storedToken = localStorage.getItem('fcm_token');
+    if (storedToken && currentUser && currentUser.token) {
+        fetch(`${API_BASE}/notifications/devices`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ fcmToken: storedToken })
+        }).catch(e => console.error(e));
+        localStorage.removeItem('fcm_token');
+    }
+
+    disconnectWebSocket();
+    stopDeviceGpsTracking();
+
     localStorage.removeItem('currentUser');
     currentUser = null;
     showToast('Signed out successfully.', 'info');
@@ -237,58 +523,73 @@ function renderApp() {
     if (!currentUser) {
         mainContentHtml = renderUnauthenticatedLanding();
         document.body.classList.remove('customer-theme');
+    } else if (currentUser.role === 'ADMIN') {
+        mainContentHtml = renderAdminPortal();
+        document.body.classList.remove('customer-theme');
     } else {
-        if (currentUser.role === 'SENDER' || currentUser.role === 'RIDER') {
-            document.body.classList.add('customer-theme');
-            if (currentUser.role === 'SENDER' && currentCustomerTab !== 'parcel' && currentCustomerTab !== 'profile') {
-                currentCustomerTab = 'parcel';
-            } else if (currentUser.role === 'RIDER' && currentCustomerTab !== 'carpool' && currentCustomerTab !== 'taxi' && currentCustomerTab !== 'profile') {
+        document.body.classList.add('customer-theme');
+        const hasTravelerCap = currentUser.capabilities && currentUser.capabilities.includes('TRAVELER');
+        
+        // Initialize default tab if empty
+        if (!currentCustomerTab) {
+            if (currentUser.role === 'TRAVELER' && hasTravelerCap) {
+                currentCustomerTab = 'captain';
+            } else if (currentUser.role === 'RIDER') {
                 currentCustomerTab = 'carpool';
+            } else {
+                currentCustomerTab = 'parcel';
             }
-        } else {
-            document.body.classList.remove('customer-theme');
         }
 
-        switch (currentUser.role) {
-            case 'SENDER':
+        switch (currentCustomerTab) {
+            case 'parcel':
                 mainContentHtml = renderSenderPortal();
                 break;
-            case 'TRAVELER':
-                mainContentHtml = renderCaptainPortal();
-                break;
-            case 'RIDER':
+            case 'carpool':
+            case 'taxi':
                 mainContentHtml = renderRiderPortal();
                 break;
-            case 'ADMIN':
-                mainContentHtml = renderAdminPortal();
+            case 'captain':
+                if (hasTravelerCap) {
+                    mainContentHtml = renderCaptainPortal();
+                } else {
+                    currentCustomerTab = 'parcel';
+                    mainContentHtml = renderSenderPortal();
+                }
+                break;
+            case 'profile':
+                mainContentHtml = renderCustomerProfile();
                 break;
             default:
-                mainContentHtml = `<div style="padding:40px; color:var(--danger);">Invalid User Role in JWT Token</div>`;
+                mainContentHtml = renderSenderPortal();
         }
     }
 
     let modalsHtml = renderActiveModal();
 
     let navBarHtml = '';
-    if (currentUser && (currentUser.role === 'SENDER' || currentUser.role === 'RIDER')) {
-        const isSender = currentUser.role === 'SENDER';
+    if (currentUser && currentUser.role !== 'ADMIN') {
+        const hasTravelerCap = currentUser.capabilities && currentUser.capabilities.includes('TRAVELER');
         navBarHtml = `
             <nav class="bottom-nav-bar">
-                ${isSender ? `
-                    <button class="bottom-nav-item ${currentCustomerTab === 'parcel' ? 'active' : ''}" onclick="switchCustomerTab('parcel')">
-                        <span class="nav-icon">📦</span>
-                        <span>Parcel</span>
+                <button class="bottom-nav-item ${currentCustomerTab === 'parcel' ? 'active' : ''}" onclick="switchCustomerTab('parcel')">
+                    <span class="nav-icon">📦</span>
+                    <span>Parcel</span>
+                </button>
+                <button class="bottom-nav-item ${currentCustomerTab === 'carpool' ? 'active' : ''}" onclick="switchCustomerTab('carpool')">
+                    <span class="nav-icon">🚗</span>
+                    <span>Carpool</span>
+                </button>
+                <button class="bottom-nav-item ${currentCustomerTab === 'taxi' ? 'active' : ''}" onclick="switchCustomerTab('taxi')">
+                    <span class="nav-icon">🚖</span>
+                    <span>Local Taxi</span>
+                </button>
+                ${hasTravelerCap ? `
+                    <button class="bottom-nav-item ${currentCustomerTab === 'captain' ? 'active' : ''}" onclick="switchCustomerTab('captain')">
+                        <span class="nav-icon">👨‍✈️</span>
+                        <span>Captain</span>
                     </button>
-                ` : `
-                    <button class="bottom-nav-item ${currentCustomerTab === 'carpool' ? 'active' : ''}" onclick="switchCustomerTab('carpool')">
-                        <span class="nav-icon">🚗</span>
-                        <span>Carpool</span>
-                    </button>
-                    <button class="bottom-nav-item ${currentCustomerTab === 'taxi' ? 'active' : ''}" onclick="switchCustomerTab('taxi')">
-                        <span class="nav-icon">🚖</span>
-                        <span>Local Taxi</span>
-                    </button>
-                `}
+                ` : ''}
                 <button class="bottom-nav-item ${currentCustomerTab === 'profile' ? 'active' : ''}" onclick="switchCustomerTab('profile')">
                     <span class="nav-icon">👤</span>
                     <span>Profile</span>
@@ -299,7 +600,7 @@ function renderApp() {
 
     root.innerHTML = `
         ${headerHtml}
-        <main class="main-wrapper" style="${currentUser && (currentUser.role === 'SENDER' || currentUser.role === 'RIDER') ? 'padding-bottom: 80px;' : ''}">
+        <main class="main-wrapper" style="${currentUser && currentUser.role !== 'ADMIN' ? 'padding-bottom: 80px;' : ''}">
             ${mainContentHtml}
         </main>
         ${navBarHtml}
@@ -1135,7 +1436,7 @@ function renderActiveModal() {
                     </div>
                     <div id="ride-tracking-map" style="height:260px; border-radius:12px; border:1px solid var(--border); margin-bottom:16px; z-index:1;"></div>
 
-                    ${currentUser && currentUser.role === 'RIDER' ? `
+                    ${currentUser && currentUser.role !== 'ADMIN' ? `
                     <div style="background:var(--bg-surface); padding:16px; border-radius:12px; border:1px solid var(--border);">
                         <h4 style="font-size:13px; font-weight:800; color:var(--danger); margin-bottom:10px; display:flex; align-items:center; gap:6px;">
                             🚨 3-Stage Emergency Safety Ladder
@@ -1160,6 +1461,37 @@ function renderActiveModal() {
                         </div>
                     </div>
                     ` : ''}
+            ${wrapEnd}
+        `;
+    }
+
+    if (activeModal === 'apply-kyc') {
+        return `
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
+                        <h3>🪪 Apply for Captain/Traveler KYC</h3>
+                        <button class="btn-close" onclick="closeModal()">✕</button>
+                    </div>
+                    <form id="apply-kyc-form" onsubmit="submitApplyKycForm(event)">
+                        <div style="font-weight:700; color:var(--porter-teal); margin-bottom:14px; font-size:13px;">Please upload your verification credentials:</div>
+                        <div class="form-group" style="margin-bottom:12px;">
+                            <label class="form-label">Aadhaar Card Number</label>
+                            <input type="text" id="apply-aadhaar" class="form-control" style="padding-left:16px;" value="123456789012" placeholder="12-digit Aadhaar" required />
+                        </div>
+                        <div class="form-group" style="margin-bottom:12px;">
+                            <label class="form-label">PAN Card Number</label>
+                            <input type="text" id="apply-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" placeholder="ABCDE1234F" required />
+                        </div>
+                        <div class="form-group" style="margin-bottom:12px;">
+                            <label class="form-label">Driving License Number</label>
+                            <input type="text" id="apply-dl" class="form-control" style="padding-left:16px;" value="DL-1420110068745" placeholder="Driving License Number" required />
+                        </div>
+                        <div class="form-group" style="margin-bottom:20px;">
+                            <label class="form-label">Vehicle Registration Certificate (RC)</label>
+                            <input type="text" id="apply-rc" class="form-control" style="padding-left:16px;" value="RC-9988-AA" placeholder="RC Number" required />
+                        </div>
+                        <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient);">Submit KYC Application</button>
+                    </form>
             ${wrapEnd}
         `;
     }
@@ -1426,6 +1758,8 @@ function bindPostRenderListeners() {
                 const data = await res.json();
                 currentUser = data;
                 localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                initWebSocket();
+                registerFcmDeviceTokenMock();
                 activeModal = null;
                 renderApp();
                 showToast(`Authenticated! Logged in as ${currentUser.fullName} (${currentUser.role}).`, 'success');
@@ -1472,6 +1806,8 @@ function bindPostRenderListeners() {
                 const data = await res.json();
                 currentUser = data;
                 localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                initWebSocket();
+                registerFcmDeviceTokenMock();
                 activeModal = null;
                 renderApp();
                 showToast(`Account Created! Logged in as ${currentUser.fullName} (${currentUser.role}).`, 'success');
@@ -2648,40 +2984,17 @@ window.initTelemetryMap = function() {
                     const tripsRes = await fetch(`${API_BASE}/trips`, { headers: getAuthHeaders() });
                     if (!tripsRes.ok) throw new Error();
                     const allTrips = await tripsRes.json();
-                    const myTrips = allTrips.filter(t => t.travelerId === currentUser.id);
+                    const myTrips = allTrips.filter(t => t.travelerId === currentUser.id && t.status === 'ACTIVE');
+                    const activeTrip = myTrips.length > 0 ? myTrips[myTrips.length - 1] : allTrips.filter(t => t.travelerId === currentUser.id)[0];
 
-                    if (myTrips.length === 0) {
+                    if (!activeTrip) {
                         showToast('Cannot broadcast GPS: No published routes found!', 'error');
                         return;
                     }
 
-                    const activeTrip = myTrips[myTrips.length - 1];
-
-                    const payload = {
-                        tripId: activeTrip.id,
-                        travelerId: currentUser.id,
-                        latitude: parseFloat(latInput.value),
-                        longitude: parseFloat(lngInput.value),
-                        speedKmh: parseFloat(document.getElementById('gps-speed').value || '85.0'),
-                        headingDegrees: 0.0,
-                        batteryLevel: 100
-                    };
-
-                    const pingRes = await fetch(`${API_BASE}/tracking/ping`, {
-                        method: 'POST',
-                        headers: {
-                            ...getAuthHeaders(),
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (pingRes.ok) {
-                        showToast(`GPS Telemetry Ping Broadcasted for Trip #${activeTrip.id}!`, 'success');
-                    } else {
-                        const err = await pingRes.json();
-                        showToast(`Broadcast failed: ${err.message || 'Error'}`, 'error');
-                    }
+                    // Start continuous background watchPosition tracking for this trip ID
+                    startDeviceGpsTracking(activeTrip.id);
+                    showToast(`Continuous GPS Broadcaster Active for Trip #${activeTrip.id}!`, 'success');
                 } catch (err) {
                     console.error(err);
                     showToast('Error broadcasting GPS telemetry', 'error');
@@ -2692,6 +3005,60 @@ window.initTelemetryMap = function() {
         console.error('Failed to init telemetry map', err);
     }
 };
+
+// Global tracking markers reference to allow direct WebSocket/STOMP manipulation
+let trackingMarkers = { pMarker: null, dMarker: null, cMarker: null, routeLine: null };
+
+function updateLiveTrackingUI(tracking, parcel) {
+    const pLat = parcel.pickupLatitude || 12.9716;
+    const pLng = parcel.pickupLongitude || 77.5946;
+    const dLat = parcel.dropoffLatitude || 13.0827;
+    const dLng = parcel.dropoffLongitude || 80.2707;
+
+    const cLat = tracking.currentLatitude;
+    const cLng = tracking.currentLongitude;
+
+    const statusEl = document.getElementById('tracking-status');
+    const distEl = document.getElementById('tracking-distance');
+    const etaEl = document.getElementById('tracking-eta');
+
+    if (statusEl) statusEl.textContent = tracking.tripStatus || parcel.status;
+    if (distEl) distEl.textContent = `${tracking.distanceRemainingKm} km`;
+    if (etaEl) etaEl.textContent = `${tracking.estimatedMinutesRemaining} mins`;
+
+    lastTrackingPingTimestamp = Date.now();
+
+    if (!trackingMapInstance) {
+        trackingMapInstance = L.map('tracking-map').setView([cLat, cLng], 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(trackingMapInstance);
+
+        trackingMarkers.pMarker = L.marker([pLat, pLng]).addTo(trackingMapInstance);
+        trackingMarkers.pMarker.bindPopup(`<b>Pickup:</b> ${parcel.pickupLocation}`);
+
+        trackingMarkers.dMarker = L.marker([dLat, dLng]).addTo(trackingMapInstance);
+        trackingMarkers.dMarker.bindPopup(`<b>Dropoff:</b> ${parcel.dropoffLocation}`);
+
+        trackingMarkers.cMarker = L.marker([cLat, cLng], { icon: createCaptainLiveIcon() }).addTo(trackingMapInstance);
+        trackingMarkers.cMarker.bindPopup("<b>Captain Current Position</b>").openPopup();
+
+        trackingMarkers.routeLine = L.polyline([[pLat, pLng], [cLat, cLng], [dLat, dLng]], { color: 'teal', weight: 4, dashArray: '8 4' }).addTo(trackingMapInstance);
+
+        const group = new L.featureGroup([trackingMarkers.pMarker, trackingMarkers.dMarker, trackingMarkers.cMarker]);
+        trackingMapInstance.fitBounds(group.getBounds().pad(0.1));
+        setTimeout(() => {
+            if (trackingMapInstance) trackingMapInstance.invalidateSize();
+        }, 250);
+    } else {
+        if (trackingMarkers.cMarker) smoothMoveMarker(trackingMarkers.cMarker, [cLat, cLng], 2000);
+        setTimeout(() => {
+            if (trackingMarkers.routeLine) trackingMarkers.routeLine.setLatLngs([[pLat, pLng], [cLat, cLng], [dLat, dLng]]);
+        }, 2100);
+    }
+
+    updateSignalLostBanner('parcel-signal-lost-area', lastTrackingPingTimestamp);
+}
 
 window.initTrackingMap = function() {
     const mapDiv = document.getElementById('tracking-map');
@@ -2709,77 +3076,41 @@ window.initTrackingMap = function() {
     const parcelId = selectedParcelForTracking.id;
     const tripId = selectedParcelForTracking.tripId;
 
-    let pMarker = null;
-    let dMarker = null;
-    let cMarker = null;
-    let routeLine = null;
+    trackingMarkers = { pMarker: null, dMarker: null, cMarker: null, routeLine: null };
 
     const pollTrackingData = async () => {
+        // If WebSocket is active, stop polling
+        if (socketConnected && trackingIntervalId) {
+            clearInterval(trackingIntervalId);
+            trackingIntervalId = null;
+            return;
+        }
+
         try {
             const parcelRes = await fetch(`${API_BASE}/parcels/${parcelId}`, { headers: getAuthHeaders() });
             if (!parcelRes.ok) return;
             const parcel = await parcelRes.json();
 
-            const pLat = parcel.pickupLatitude || 12.9716;
-            const pLng = parcel.pickupLongitude || 77.5946;
-            const dLat = parcel.dropoffLatitude || 13.0827;
-            const dLng = parcel.dropoffLongitude || 80.2707;
-
             const liveRes = await fetch(`${API_BASE}/tracking/live/${tripId}`, { headers: getAuthHeaders() });
             if (!liveRes.ok) return;
             const tracking = await liveRes.json();
 
-            const cLat = tracking.currentLatitude;
-            const cLng = tracking.currentLongitude;
-
-            const statusEl = document.getElementById('tracking-status');
-            const distEl = document.getElementById('tracking-distance');
-            const etaEl = document.getElementById('tracking-eta');
-
-            if (statusEl) statusEl.textContent = tracking.tripStatus || parcel.status;
-            if (distEl) distEl.textContent = `${tracking.distanceRemainingKm} km`;
-            if (etaEl) etaEl.textContent = `${tracking.estimatedMinutesRemaining} mins`;
-
-            lastTrackingPingTimestamp = Date.now();
-
-            if (!trackingMapInstance) {
-                trackingMapInstance = L.map('tracking-map').setView([cLat, cLng], 8);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(trackingMapInstance);
-
-                pMarker = L.marker([pLat, pLng]).addTo(trackingMapInstance);
-                pMarker.bindPopup(`<b>Pickup:</b> ${parcel.pickupLocation}`);
-
-                dMarker = L.marker([dLat, dLng]).addTo(trackingMapInstance);
-                dMarker.bindPopup(`<b>Dropoff:</b> ${parcel.dropoffLocation}`);
-
-                cMarker = L.marker([cLat, cLng], { icon: createCaptainLiveIcon() }).addTo(trackingMapInstance);
-                cMarker.bindPopup("<b>Captain Current Position</b>").openPopup();
-
-                routeLine = L.polyline([[pLat, pLng], [cLat, cLng], [dLat, dLng]], { color: 'teal', weight: 4, dashArray: '8 4' }).addTo(trackingMapInstance);
-
-                const group = new L.featureGroup([pMarker, dMarker, cMarker]);
-                trackingMapInstance.fitBounds(group.getBounds().pad(0.1));
-                setTimeout(() => {
-                    if (trackingMapInstance) trackingMapInstance.invalidateSize();
-                }, 250);
-            } else {
-                if (cMarker) smoothMoveMarker(cMarker, [cLat, cLng], 2000);
-                setTimeout(() => {
-                    if (routeLine) routeLine.setLatLngs([[pLat, pLng], [cLat, cLng], [dLat, dLng]]);
-                }, 2100);
-            }
-
-            updateSignalLostBanner('parcel-signal-lost-area', lastTrackingPingTimestamp);
+            updateLiveTrackingUI(tracking, parcel);
         } catch (err) {
             console.error(err);
             updateSignalLostBanner('parcel-signal-lost-area', lastTrackingPingTimestamp);
         }
     };
 
-    pollTrackingData();
-    trackingIntervalId = setInterval(pollTrackingData, 5000);
+    if (socketConnected) {
+        // WebSocket active: Subscribe in real-time, perform one initial load to set up the map immediately
+        subscribeToActiveViews();
+        pollTrackingData();
+    } else {
+        // Fallback to HTTP polling
+        pollTrackingData();
+        trackingIntervalId = setInterval(pollTrackingData, 5000);
+    }
 };
 
 // Rider Portal Functions
@@ -3531,6 +3862,64 @@ window.initRideTrackingMap = function() {
     const mapDiv = document.getElementById('ride-tracking-map');
     if (!mapDiv) return;
 
+// Global ride tracking markers reference to allow direct WebSocket/STOMP manipulation
+let rideTrackingMarkers = { pMarker: null, dMarker: null, cMarker: null, routeLine: null };
+
+function updateRideTrackingUI(tracking, ride) {
+    const pLat = ride.pickupLatitude || 12.9716;
+    const pLng = ride.pickupLongitude || 77.5946;
+    const dLat = ride.dropoffLatitude || 13.0827;
+    const dLng = ride.dropoffLongitude || 80.2707;
+
+    const cLat = tracking.currentLatitude;
+    const cLng = tracking.currentLongitude;
+
+    const statusEl = document.getElementById('ride-tracking-status');
+    const distEl = document.getElementById('ride-tracking-distance');
+    const etaEl = document.getElementById('ride-tracking-eta');
+
+    if (statusEl) statusEl.textContent = ride.status;
+    if (distEl) distEl.textContent = `${tracking.distanceRemainingKm.toFixed(1)} km`;
+    if (etaEl) etaEl.textContent = `${tracking.estimatedMinutesRemaining} mins`;
+
+    lastTrackingPingTimestamp = Date.now();
+
+    if (!trackingMapInstance) {
+        trackingMapInstance = L.map('ride-tracking-map').setView([cLat, cLng], 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(trackingMapInstance);
+
+        rideTrackingMarkers.pMarker = L.marker([pLat, pLng]).addTo(trackingMapInstance);
+        rideTrackingMarkers.pMarker.bindPopup(`<b>Pickup:</b> ${ride.pickupLocation}`);
+
+        rideTrackingMarkers.dMarker = L.marker([dLat, dLng]).addTo(trackingMapInstance);
+        rideTrackingMarkers.dMarker.bindPopup(`<b>Dropoff:</b> ${ride.dropoffLocation}`);
+
+        rideTrackingMarkers.cMarker = L.marker([cLat, cLng], { icon: createCaptainLiveIcon() }).addTo(trackingMapInstance);
+        rideTrackingMarkers.cMarker.bindPopup("<b>Captain Position</b>").openPopup();
+
+        rideTrackingMarkers.routeLine = L.polyline([[pLat, pLng], [cLat, cLng], [dLat, dLng]], { color: 'indigo', weight: 4, dashArray: '8 4' }).addTo(trackingMapInstance);
+
+        const group = new L.featureGroup([rideTrackingMarkers.pMarker, rideTrackingMarkers.dMarker, rideTrackingMarkers.cMarker]);
+        trackingMapInstance.fitBounds(group.getBounds().pad(0.1));
+        setTimeout(() => {
+            if (trackingMapInstance) trackingMapInstance.invalidateSize();
+        }, 250);
+    } else {
+        if (rideTrackingMarkers.cMarker) smoothMoveMarker(rideTrackingMarkers.cMarker, [cLat, cLng], 2000);
+        setTimeout(() => {
+            if (rideTrackingMarkers.routeLine) rideTrackingMarkers.routeLine.setLatLngs([[pLat, pLng], [cLat, cLng], [dLat, dLng]]);
+        }, 2100);
+    }
+
+    updateSignalLostBanner('ride-signal-lost-area', lastTrackingPingTimestamp);
+}
+
+window.initRideTrackingMap = function() {
+    const mapDiv = document.getElementById('ride-tracking-map');
+    if (!mapDiv) return;
+
     if (trackingMapInstance) {
         try {
             trackingMapInstance.remove();
@@ -3543,12 +3932,16 @@ window.initRideTrackingMap = function() {
     const rideId = selectedRideForTracking.id;
     const tripId = selectedRideForTracking.tripId;
 
-    let pMarker = null;
-    let dMarker = null;
-    let cMarker = null;
-    let routeLine = null;
+    rideTrackingMarkers = { pMarker: null, dMarker: null, cMarker: null, routeLine: null };
 
     const pollRideData = async () => {
+        // If WebSocket is active, stop polling
+        if (socketConnected && trackingIntervalId) {
+            clearInterval(trackingIntervalId);
+            trackingIntervalId = null;
+            return;
+        }
+
         try {
             let ride;
             if (selectedRideForTracking.isLocalTaxi) {
@@ -3561,66 +3954,26 @@ window.initRideTrackingMap = function() {
                 ride = await rideRes.json();
             }
 
-            const pLat = ride.pickupLatitude || 12.9716;
-            const pLng = ride.pickupLongitude || 77.5946;
-            const dLat = ride.dropoffLatitude || 13.0827;
-            const dLng = ride.dropoffLongitude || 80.2707;
-
             const liveRes = await fetch(`${API_BASE}/tracking/live/${tripId}`, { headers: getAuthHeaders() });
             if (!liveRes.ok) return;
             const tracking = await liveRes.json();
 
-            const cLat = tracking.currentLatitude;
-            const cLng = tracking.currentLongitude;
-
-            const statusEl = document.getElementById('ride-tracking-status');
-            const distEl = document.getElementById('ride-tracking-distance');
-            const etaEl = document.getElementById('ride-tracking-eta');
-
-            if (statusEl) statusEl.textContent = ride.status;
-            if (distEl) distEl.textContent = `${tracking.distanceRemainingKm.toFixed(1)} km`;
-            if (etaEl) etaEl.textContent = `${tracking.estimatedMinutesRemaining} mins`;
-
-            lastTrackingPingTimestamp = Date.now();
-
-            if (!trackingMapInstance) {
-                trackingMapInstance = L.map('ride-tracking-map').setView([cLat, cLng], 8);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(trackingMapInstance);
-
-                pMarker = L.marker([pLat, pLng]).addTo(trackingMapInstance);
-                pMarker.bindPopup(`<b>Pickup:</b> ${ride.pickupLocation}`);
-
-                dMarker = L.marker([dLat, dLng]).addTo(trackingMapInstance);
-                dMarker.bindPopup(`<b>Dropoff:</b> ${ride.dropoffLocation}`);
-
-                cMarker = L.marker([cLat, cLng], { icon: createCaptainLiveIcon() }).addTo(trackingMapInstance);
-                cMarker.bindPopup("<b>Captain Position</b>").openPopup();
-
-                routeLine = L.polyline([[pLat, pLng], [cLat, cLng], [dLat, dLng]], { color: 'indigo', weight: 4, dashArray: '8 4' }).addTo(trackingMapInstance);
-
-                const group = new L.featureGroup([pMarker, dMarker, cMarker]);
-                trackingMapInstance.fitBounds(group.getBounds().pad(0.1));
-                setTimeout(() => {
-                    if (trackingMapInstance) trackingMapInstance.invalidateSize();
-                }, 250);
-            } else {
-                if (cMarker) smoothMoveMarker(cMarker, [cLat, cLng], 2000);
-                setTimeout(() => {
-                    if (routeLine) routeLine.setLatLngs([[pLat, pLng], [cLat, cLng], [dLat, dLng]]);
-                }, 2100);
-            }
-
-            updateSignalLostBanner('ride-signal-lost-area', lastTrackingPingTimestamp);
+            updateRideTrackingUI(tracking, ride);
         } catch (err) {
             console.error(err);
             updateSignalLostBanner('ride-signal-lost-area', lastTrackingPingTimestamp);
         }
     };
 
-    pollRideData();
-    trackingIntervalId = setInterval(pollRideData, 5000);
+    if (socketConnected) {
+        // WebSocket active: Subscribe in real-time and perform initial load
+        subscribeToActiveViews();
+        pollRideData();
+    } else {
+        // Fallback to HTTP polling
+        pollRideData();
+        trackingIntervalId = setInterval(pollRideData, 5000);
+    }
 };
 
 async function triggerSafetyEscalationBtn(rideId, stage) {
@@ -4103,6 +4456,13 @@ async function toggleLocalTaxiAvailabilityBtn(isChecked, isCoordinateUpdateOnly 
             } else {
                 showToast(isChecked ? 'You are now online for local taxi rides!' : 'You went offline.', 'success');
             }
+
+            if (isChecked && !isCoordinateUpdateOnly) {
+                startDeviceGpsTracking(null);
+            } else if (!isChecked && !isCoordinateUpdateOnly) {
+                stopDeviceGpsTracking();
+            }
+
             fetchLocalCaptainStatus();
             fetchCaptainLocalBookings();
         } else {
@@ -4412,6 +4772,52 @@ window.useRecentLocation = function(name, lat, lng, targetType) {
 };
 
 function renderCustomerProfile() {
+    const hasTravelerCap = currentUser.capabilities && currentUser.capabilities.includes('TRAVELER');
+    let captainSecHtml = '';
+    
+    if (hasTravelerCap) {
+        captainSecHtml = `
+            <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px; border-color: var(--accent-green);">
+                <h3 style="font-size:15px; font-weight:800; color:var(--text-white); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    ✅ Approved Captain Status
+                </h3>
+                <p style="color:var(--text-body); font-size:12px; line-height:1.5;">
+                    You are verified! You can publish rides, accept passengers/parcels, and view your earnings via the **Captain** tab in the bottom navigation menu.
+                </p>
+            </div>
+        `;
+    } else if (currentUser.kycStatus === 'PENDING_APPROVAL') {
+        captainSecHtml = `
+            <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px; border-color: var(--warning);">
+                <h3 style="font-size:15px; font-weight:800; color:var(--warning); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    ⏳ Captain Review Pending
+                </h3>
+                <p style="color:var(--text-body); font-size:12px; line-height:1.5;">
+                    Your verification documents have been submitted. An administrator will review your application shortly.
+                </p>
+            </div>
+        `;
+    } else {
+        captainSecHtml = `
+            <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px;">
+                <h3 style="font-size:15px; font-weight:800; color:var(--text-white); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                    🚀 Earn as a Captain
+                </h3>
+                <p style="color:var(--text-body); font-size:12px; margin-bottom:16px; line-height:1.5;">
+                    Interested in publishing trips, carrying packages, or driving passengers? Apply to become a trusted Captain.
+                </p>
+                ${currentUser.kycStatus === 'REJECTED' ? `
+                    <div style="color:var(--danger); font-size:11px; margin-bottom:12px; font-weight:700;">⚠️ Previous application was rejected. Please review details and apply again.</div>
+                ` : ''}
+                <button class="btn-search" style="width:100%; border:none; background: var(--porter-gradient);" onclick="activeModal = 'apply-kyc'; renderApp();">
+                    🔑 Submit KYC to Unlock Captain Status
+                </button>
+            </div>
+        `;
+    }
+
+    const capsDisplay = currentUser.capabilities ? currentUser.capabilities.join(', ') : currentUser.role;
+
     return `
         <div class="map-first-layout">
             <div style="flex:1; padding:24px; overflow-y:auto; max-width: 600px; margin: 0 auto; width: 100%;">
@@ -4422,10 +4828,12 @@ function renderCustomerProfile() {
                         </div>
                         <div>
                             <h2 style="font-size:22px; font-weight:800; color:var(--text-white); margin-bottom:4px;">${escapeHtml(currentUser.fullName)}</h2>
-                            <span class="user-role-badge" style="background:rgba(99,102,241,0.2); color:var(--primary); font-size:12px; font-weight:700; padding:4px 8px; border-radius:6px; border: 1px solid rgba(99,102,241,0.3);">${currentUser.role}</span>
+                            <span class="user-role-badge" style="background:rgba(99,102,241,0.2); color:var(--primary); font-size:12px; font-weight:700; padding:4px 8px; border-radius:6px; border: 1px solid rgba(99,102,241,0.3);">${capsDisplay}</span>
                         </div>
                     </div>
                 </div>
+
+                ${captainSecHtml}
 
                 <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px;">
                     <h3 style="font-size:15px; font-weight:800; color:var(--text-white); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
@@ -4504,6 +4912,46 @@ window.initCustomerMap = function() {
         L.control.zoom({ position: 'topright' }).addTo(customerMapInstance);
     } catch (err) {
         console.error('Failed to init customer map', err);
+    }
+};
+
+window.submitApplyKycForm = async function(event) {
+    event.preventDefault();
+    const aadhaar = document.getElementById('apply-aadhaar').value;
+    const pan = document.getElementById('apply-pan').value;
+    const dl = document.getElementById('apply-dl').value;
+    const rc = document.getElementById('apply-rc').value;
+    
+    try {
+        const res = await fetch(`${API_BASE}/kyc/submit`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                userId: currentUser.id,
+                aadhaarNumber: aadhaar,
+                panNumber: pan,
+                drivingLicenceNumber: dl,
+                rcNumber: rc
+            })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            currentUser.kycStatus = 'PENDING_APPROVAL';
+            currentUser.role = 'TRAVELER';
+            if (currentUser.capabilities && !currentUser.capabilities.includes('TRAVELER')) {
+                // keep the SENDER/RIDER capabilities list as is but update kycStatus
+            }
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            showToast("KYC Application submitted successfully! Awaiting Admin approval.", "success");
+            closeModal();
+            renderApp();
+        } else {
+            const err = await res.json();
+            showToast("Submission failed: " + (err.error || "Unknown error"), "error");
+        }
+    } catch (err) {
+        console.error("KYC submission error", err);
+        showToast("Network error submitting KYC.", "error");
     }
 };
 
