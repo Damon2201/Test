@@ -33,11 +33,12 @@ public class SecurityHeadersFilter implements Filter {
         res.setHeader("X-Frame-Options", "DENY");
         res.setHeader("Content-Security-Policy",
                 "default-src 'self'; " +
-                "script-src 'self' 'unsafe-inline'; " +
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://checkout.razorpay.com; " +
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; " +
                 "font-src https://fonts.gstatic.com; " +
                 "img-src 'self' data: https://*.openstreetmap.org https://unpkg.com; " +
-                "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org;");
+                "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com; " +
+                "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org https://api.razorpay.com https://checkout.razorpay.com;");
 
         chain.doFilter(request, response);
     }
