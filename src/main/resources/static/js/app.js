@@ -1022,6 +1022,7 @@ function renderActiveModal() {
                     </div>
                     <div id="ride-tracking-map" style="height:260px; border-radius:12px; border:1px solid var(--border); margin-bottom:16px; z-index:1;"></div>
 
+                    ${currentUser && currentUser.role === 'RIDER' ? `
                     <div style="background:var(--bg-surface); padding:16px; border-radius:12px; border:1px solid var(--border);">
                         <h4 style="font-size:13px; font-weight:800; color:var(--danger); margin-bottom:10px; display:flex; align-items:center; gap:6px;">
                             🚨 3-Stage Emergency Safety Ladder
@@ -1045,6 +1046,7 @@ function renderActiveModal() {
                             </div>
                         </div>
                     </div>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -1698,7 +1700,7 @@ async function fetchParcelsForSender() {
                 </div>
                 ${otpStatusHtml}
                 <div class="card-footer" style="margin-top:14px; padding-top:12px; display:flex; justify-content:space-between; align-items:center;">
-                    <span class="price-amount" style="font-size:18px;">₹${p.calculatedFare}</span>
+                    <span class="price-amount" style="font-size:18px;">₹${Math.round(p.calculatedFare)}</span>
                     <div style="display:flex; align-items:center; gap:8px;">
                         ${chatBtnHtml}
                         ${actionBtnHtml}
@@ -1787,10 +1789,10 @@ async function fetchParcelsForCaptain() {
                         </div>
                         <div style="font-size:12px; color:var(--text-body); margin-bottom:12px;">
                             <div><b>Route:</b> ${escapeHtml(p.pickupLocation)} ➔ ${escapeHtml(p.dropoffLocation)}</div>
-                            <div><b>Weight:</b> ${p.estimatedWeightKg} kg | <b>Earnings:</b> ₹${p.calculatedFare}</div>
+                            <div><b>Weight:</b> ${p.estimatedWeightKg} kg | <b>Earnings:</b> ₹${Math.round(p.calculatedFare)}</div>
                         </div>
                         <div class="card-footer" style="margin-top:14px; padding-top:12px; display:flex; justify-content:space-between; align-items:center;">
-                            <span class="price-amount" style="font-size:18px;">₹${p.calculatedFare}</span>
+                            <span class="price-amount" style="font-size:18px;">₹${Math.round(p.calculatedFare)}</span>
                             <div style="display:flex; align-items:center; gap:8px;">
                                 ${chatBtnHtml}
                                 ${actionBtnHtml}
@@ -2213,12 +2215,37 @@ window.initBookingMap = function() {
     const mapDiv = document.getElementById('booking-map');
     if (!mapDiv) return;
 
-    const lat1 = parseFloat(document.getElementById('book-pickup-lat').value || '12.9716');
-    const lng1 = parseFloat(document.getElementById('book-pickup-lng').value || '77.5946');
-    const lat2 = parseFloat(document.getElementById('book-dropoff-lat').value || '13.0827');
-    const lng2 = parseFloat(document.getElementById('book-dropoff-lng').value || '80.2707');
+    if (bookingMapInstance) {
+        try {
+            bookingMapInstance.remove();
+        } catch (e) {
+            console.error("Error removing map instance:", e);
+        }
+        bookingMapInstance = null;
+    }
+
+    const lat1Str = document.getElementById('book-pickup-lat').value;
+    const lng1Str = document.getElementById('book-pickup-lng').value;
+    const lat2Str = document.getElementById('book-dropoff-lat').value;
+    const lng2Str = document.getElementById('book-dropoff-lng').value;
+
+    const hasCoords = lat1Str && lng1Str && lat2Str && lng2Str;
 
     try {
+        if (!hasCoords) {
+            // Keep map clear and centered on India while geocoding is in-progress
+            bookingMapInstance = L.map('booking-map').setView([20.5937, 78.9629], 4);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(bookingMapInstance);
+            return;
+        }
+
+        const lat1 = parseFloat(lat1Str);
+        const lng1 = parseFloat(lng1Str);
+        const lat2 = parseFloat(lat2Str);
+        const lng2 = parseFloat(lng2Str);
+
         bookingMapInstance = L.map('booking-map').setView([lat1, lng1], 6);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -2397,6 +2424,15 @@ window.initTelemetryMap = function() {
     const mapDiv = document.getElementById('telemetry-map');
     if (!mapDiv) return;
 
+    if (telemetryMapInstance) {
+        try {
+            telemetryMapInstance.remove();
+        } catch (e) {
+            console.error("Error removing map instance:", e);
+        }
+        telemetryMapInstance = null;
+    }
+
     const latInput = document.getElementById('gps-lat');
     const lngInput = document.getElementById('gps-lng');
 
@@ -2508,6 +2544,15 @@ window.initTelemetryMap = function() {
 window.initTrackingMap = function() {
     const mapDiv = document.getElementById('tracking-map');
     if (!mapDiv) return;
+
+    if (trackingMapInstance) {
+        try {
+            trackingMapInstance.remove();
+        } catch (e) {
+            console.error("Error removing map instance:", e);
+        }
+        trackingMapInstance = null;
+    }
 
     const parcelId = selectedParcelForTracking.id;
     const tripId = selectedParcelForTracking.tripId;
@@ -3015,12 +3060,37 @@ window.initSeatBookingMap = function() {
     const mapDiv = document.getElementById('seat-booking-map');
     if (!mapDiv) return;
 
-    const lat1 = parseFloat(document.getElementById('seat-pickup-lat').value || '12.9716');
-    const lng1 = parseFloat(document.getElementById('seat-pickup-lng').value || '77.5946');
-    const lat2 = parseFloat(document.getElementById('seat-dropoff-lat').value || '13.0827');
-    const lng2 = parseFloat(document.getElementById('seat-dropoff-lng').value || '80.2707');
+    if (bookingMapInstance) {
+        try {
+            bookingMapInstance.remove();
+        } catch (e) {
+            console.error("Error removing map instance:", e);
+        }
+        bookingMapInstance = null;
+    }
+
+    const lat1Str = document.getElementById('seat-pickup-lat').value;
+    const lng1Str = document.getElementById('seat-pickup-lng').value;
+    const lat2Str = document.getElementById('seat-dropoff-lat').value;
+    const lng2Str = document.getElementById('seat-dropoff-lng').value;
+
+    const hasCoords = lat1Str && lng1Str && lat2Str && lng2Str;
 
     try {
+        if (!hasCoords) {
+            // Keep map clear and centered on India while geocoding is in-progress
+            bookingMapInstance = L.map('seat-booking-map').setView([20.5937, 78.9629], 4);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(bookingMapInstance);
+            return;
+        }
+
+        const lat1 = parseFloat(lat1Str);
+        const lng1 = parseFloat(lng1Str);
+        const lat2 = parseFloat(lat2Str);
+        const lng2 = parseFloat(lng2Str);
+
         bookingMapInstance = L.map('seat-booking-map').setView([lat1, lng1], 6);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -3304,6 +3374,15 @@ window.initRideTrackingMap = function() {
     const mapDiv = document.getElementById('ride-tracking-map');
     if (!mapDiv) return;
 
+    if (trackingMapInstance) {
+        try {
+            trackingMapInstance.remove();
+        } catch (e) {
+            console.error("Error removing map instance:", e);
+        }
+        trackingMapInstance = null;
+    }
+
     const rideId = selectedRideForTracking.id;
     const tripId = selectedRideForTracking.tripId;
 
@@ -3452,6 +3531,15 @@ let localTaxiPolyline = null;
 window.initLocalTaxiBookingMap = function() {
     const mapDiv = document.getElementById('local-taxi-booking-map');
     if (!mapDiv) return;
+
+    if (localTaxiBookingMapInstance) {
+        try {
+            localTaxiBookingMapInstance.remove();
+        } catch (e) {
+            console.error("Error removing map instance:", e);
+        }
+        localTaxiBookingMapInstance = null;
+    }
 
     const lat1 = parseFloat(document.getElementById('local-taxi-pickup-lat').value || '12.9352');
     const lng1 = parseFloat(document.getElementById('local-taxi-pickup-lng').value || '77.6245');
@@ -3779,8 +3867,25 @@ async function openLocalTaxiTrackingModal(bookingId) {
         const res = await fetch(`${API_BASE}/taxi/${bookingId}`, { headers: getAuthHeaders() });
         if (res.ok) {
             const b = await res.json();
+            
+            // Fetch corresponding RideRequest by tripId so safety triggers function correctly
+            let rideId = b.id;
+            if (b.tripId) {
+                try {
+                    const rRes = await fetch(`${API_BASE}/rides/trip/${b.tripId}`, { headers: getAuthHeaders() });
+                    if (rRes.ok) {
+                        const rides = await rRes.json();
+                        if (rides && rides.length > 0) {
+                            rideId = rides[0].id;
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error matching RideRequest for taxi trip", err);
+                }
+            }
+
             selectedRideForTracking = {
-                id: b.id,
+                id: rideId,
                 tripId: b.tripId,
                 status: b.status,
                 pickupLocation: b.pickupLocation,

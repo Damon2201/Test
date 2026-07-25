@@ -29,6 +29,9 @@ public class LocalTaxiService {
     @Autowired
     private PaymentRepository paymentRepository;
 
+    @Autowired
+    private RideRequestRepository rideRequestRepository;
+
     @Transactional
     public LocalCaptainStatus toggleAvailability(Long captainId, boolean available, Double latitude, Double longitude) {
         User user = userRepository.findById(captainId)
@@ -172,6 +175,25 @@ public class LocalTaxiService {
         trip = tripRepository.save(trip);
         booking.setTripId(trip.getId());
 
+        // Create corresponding RideRequest to support the RIDER safety mode features
+        RideRequest ride = RideRequest.builder()
+                .riderId(booking.getRiderId())
+                .tripId(trip.getId())
+                .pickupLocation(booking.getPickupLocation())
+                .dropoffLocation(booking.getDropoffLocation())
+                .calculatedFare(booking.getCalculatedFare())
+                .safetyModeEnabled(booking.isSafetyModeEnabled())
+                .status(RideRequest.RideStatus.ACCEPTED)
+                .pickupLatitude(booking.getPickupLatitude())
+                .pickupLongitude(booking.getPickupLongitude())
+                .dropoffLatitude(booking.getDropoffLatitude())
+                .dropoffLongitude(booking.getDropoffLongitude())
+                .estimatedDurationMinutes(30)
+                .bufferMinutes(5)
+                .createdAt(LocalDateTime.now())
+                .build();
+        rideRequestRepository.save(ride);
+
         taxiBookingRepository.save(booking);
 
         Payment payment = Payment.builder()
@@ -207,6 +229,10 @@ public class LocalTaxiService {
                     t.setStatus(Trip.TripStatus.ACTIVE);
                     tripRepository.save(t);
                 });
+                rideRequestRepository.findByTripId(booking.getTripId()).forEach(r -> {
+                    r.setStatus(RideRequest.RideStatus.IN_PROGRESS);
+                    rideRequestRepository.save(r);
+                });
             }
         } else if (newStatus == LocalTaxiBookingStatus.COMPLETED) {
             // Free Captain for new rides
@@ -220,6 +246,10 @@ public class LocalTaxiService {
                 tripRepository.findById(booking.getTripId()).ifPresent(t -> {
                     t.setStatus(Trip.TripStatus.COMPLETED);
                     tripRepository.save(t);
+                });
+                rideRequestRepository.findByTripId(booking.getTripId()).forEach(r -> {
+                    r.setStatus(RideRequest.RideStatus.COMPLETED);
+                    rideRequestRepository.save(r);
                 });
             }
 
@@ -243,6 +273,10 @@ public class LocalTaxiService {
                 tripRepository.findById(booking.getTripId()).ifPresent(t -> {
                     t.setStatus(Trip.TripStatus.CANCELLED);
                     tripRepository.save(t);
+                });
+                rideRequestRepository.findByTripId(booking.getTripId()).forEach(r -> {
+                    r.setStatus(RideRequest.RideStatus.CANCELLED);
+                    rideRequestRepository.save(r);
                 });
             }
 
