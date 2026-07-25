@@ -3858,10 +3858,6 @@ async function pollForActiveCheckin(rideId) {
     }
 }
 
-window.initRideTrackingMap = function() {
-    const mapDiv = document.getElementById('ride-tracking-map');
-    if (!mapDiv) return;
-
 // Global ride tracking markers reference to allow direct WebSocket/STOMP manipulation
 let rideTrackingMarkers = { pMarker: null, dMarker: null, cMarker: null, routeLine: null };
 
