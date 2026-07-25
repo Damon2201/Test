@@ -480,16 +480,18 @@ function renderRiderPortal() {
             </div>
 
             <div class="route-card" style="padding: 24px; margin-bottom: 24px;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 16px; align-items: end;">
-                    <div class="form-group">
+                <div class="rider-search-grid">
+                    <div class="form-group" style="position:relative;">
                         <label class="form-label" for="rider-search-source">Leaving From</label>
-                        <input type="text" id="rider-search-source" class="form-control" placeholder="e.g., Bengaluru" style="padding-left: 16px;" />
+                        <input type="text" id="rider-search-source" class="form-control" placeholder="e.g., Bengaluru" style="padding-left: 16px;" autocomplete="off" />
+                        <div id="rider-search-source-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="position:relative;">
                         <label class="form-label" for="rider-search-destination">Going To</label>
-                        <input type="text" id="rider-search-destination" class="form-control" placeholder="e.g., Chennai" style="padding-left: 16px;" />
+                        <input type="text" id="rider-search-destination" class="form-control" placeholder="e.g., Chennai" style="padding-left: 16px;" autocomplete="off" />
+                        <div id="rider-search-destination-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                     </div>
-                    <button class="btn-search" onclick="triggerRiderSearch()" style="height: 46px; padding: 0 32px;">Search Seats</button>
+                    <button class="btn-search" onclick="triggerRiderSearch()" style="height: 46px; padding: 0 32px; width: 100%;">Search Seats</button>
                 </div>
             </div>
 
@@ -1239,6 +1241,8 @@ function bindPostRenderListeners() {
     const riderSearchResults = document.getElementById('rider-search-results');
     if (riderSearchResults) {
         fetchTripsForRider();
+        setupSimpleAutocomplete('rider-search-source', 'rider-search-source-suggestions');
+        setupSimpleAutocomplete('rider-search-destination', 'rider-search-destination-suggestions');
     }
 
     const riderRidesContainer = document.getElementById('rider-rides-container');

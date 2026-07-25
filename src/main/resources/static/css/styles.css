@@ -994,6 +994,13 @@ body.modal-open {
     50% { opacity: 0.4; transform: scale(0.7); }
 }
 
+.rider-search-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 180px;
+    gap: 16px;
+    align-items: end;
+}
+
 /* ==========================================================================
    MOBILE & RESPONSIVE LAYOUT SYSTEM
    ========================================================================== */
@@ -1069,6 +1076,14 @@ body.modal-open {
     .telemetry-card {
         width: 100%;
         padding: 20px;
+    }
+
+    .rider-search-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .rider-search-grid button {
+        grid-column: span 2;
+        width: 100%;
     }
 
     /* Broadcaster inputs spacing */
@@ -1256,6 +1271,13 @@ body.modal-open {
     .kyc-grid {
         grid-template-columns: 1fr !important;
         gap: 12px;
+    }
+
+    .rider-search-grid {
+        grid-template-columns: 1fr !important;
+    }
+    .rider-search-grid button {
+        grid-column: span 1 !important;
     }
     
     /* Mobile Leaflet popup styles to prevent clipping */
