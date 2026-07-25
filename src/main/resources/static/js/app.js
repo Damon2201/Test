@@ -750,15 +750,15 @@ function renderActiveModal() {
                             <label class="form-label">Pickup Address</label>
                             <input type="text" id="book-pickup" class="form-control" style="padding-left:16px;" value="${escapeHtml(pickupVal)}" placeholder="Search pickup area..." autocomplete="off" required />
                             <div id="pickup-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                            <input type="hidden" id="book-pickup-lat" value="12.9716" />
-                            <input type="hidden" id="book-pickup-lng" value="77.5946" />
+                            <input type="hidden" id="book-pickup-lat" value="" />
+                            <input type="hidden" id="book-pickup-lng" value="" />
                         </div>
                         <div class="form-group" style="margin-bottom:12px; position:relative;">
                             <label class="form-label">Dropoff Address</label>
                             <input type="text" id="book-dropoff" class="form-control" style="padding-left:16px;" value="${escapeHtml(dropoffVal)}" placeholder="Search dropoff area..." autocomplete="off" required />
                             <div id="dropoff-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                            <input type="hidden" id="book-dropoff-lat" value="13.0827" />
-                            <input type="hidden" id="book-dropoff-lng" value="80.2707" />
+                            <input type="hidden" id="book-dropoff-lat" value="" />
+                            <input type="hidden" id="book-dropoff-lng" value="" />
                         </div>
                         <div id="booking-map" style="height:180px; border-radius:12px; margin-bottom:16px; border:1px solid var(--border); z-index:1;"></div>
                         <div id="fare-breakdown-box" style="background:var(--bg-surface); padding:16px; border-radius:12px; margin-bottom:20px; border:1px solid var(--border);">
@@ -953,14 +953,14 @@ function renderActiveModal() {
                         <div class="form-group" style="margin-bottom:12px; position:relative;">
                             <label class="form-label">Pickup Address</label>
                             <input type="text" id="seat-pickup" class="form-control" style="padding-left:16px;" value="${escapeHtml(trip.source)}" placeholder="Search pickup area..." required />
-                            <input type="hidden" id="seat-pickup-lat" value="12.9716" />
-                            <input type="hidden" id="seat-pickup-lng" value="77.5946" />
+                            <input type="hidden" id="seat-pickup-lat" value="" />
+                            <input type="hidden" id="seat-pickup-lng" value="" />
                         </div>
                         <div class="form-group" style="margin-bottom:12px; position:relative;">
                             <label class="form-label">Dropoff Address</label>
                             <input type="text" id="seat-dropoff" class="form-control" style="padding-left:16px;" value="${escapeHtml(trip.destination)}" placeholder="Search dropoff area..." required />
-                            <input type="hidden" id="seat-dropoff-lat" value="13.0827" />
-                            <input type="hidden" id="seat-dropoff-lng" value="80.2707" />
+                            <input type="hidden" id="seat-dropoff-lat" value="" />
+                            <input type="hidden" id="seat-dropoff-lng" value="" />
                         </div>
                         <div id="seat-booking-map" style="height:180px; border-radius:12px; margin-bottom:16px; border:1px solid var(--border); z-index:1;"></div>
                         
@@ -1097,8 +1097,13 @@ async function openBookParcelModal(tripId) {
     activeModal = 'book-parcel';
     renderApp();
     
-    // Trigger default quote calculation
+    // Clear old/placeholder quote initially
     updateFareQuote(15000);
+
+    let pickupLat = "";
+    let pickupLng = "";
+    let dropoffLat = "";
+    let dropoffLng = "";
 
     // Dynamically geocode the trip source and destination to set the initial pins!
     try {
@@ -1113,30 +1118,29 @@ async function openBookParcelModal(tripId) {
             const srcData = await srcRes.json();
             const destData = await destRes.json();
             
-            let updated = false;
             if (srcData.length > 0) {
-                const latEl = document.getElementById('book-pickup-lat');
-                const lngEl = document.getElementById('book-pickup-lng');
-                if (latEl && lngEl) {
-                    latEl.value = srcData[0].lat;
-                    lngEl.value = srcData[0].lon;
-                    updated = true;
-                }
+                pickupLat = srcData[0].lat;
+                pickupLng = srcData[0].lon;
             }
             if (destData.length > 0) {
-                const latEl = document.getElementById('book-dropoff-lat');
-                const lngEl = document.getElementById('book-dropoff-lng');
-                if (latEl && lngEl) {
-                    latEl.value = destData[0].lat;
-                    lngEl.value = destData[0].lon;
-                    updated = true;
-                }
+                dropoffLat = destData[0].lat;
+                dropoffLng = destData[0].lon;
             }
             
-            if (updated) {
-                initBookingMap();
-                updateFareQuote(15000);
+            const lat1El = document.getElementById('book-pickup-lat');
+            const lng1El = document.getElementById('book-pickup-lng');
+            const lat2El = document.getElementById('book-dropoff-lat');
+            const lng2El = document.getElementById('book-dropoff-lng');
+            
+            if (lat1El && lng1El && lat2El && lng2El) {
+                lat1El.value = pickupLat;
+                lng1El.value = pickupLng;
+                lat2El.value = dropoffLat;
+                lng2El.value = dropoffLng;
             }
+            
+            initBookingMap();
+            updateFareQuote(15000);
         }
     } catch (err) {
         console.error('Error geocoding initial trip locations', err);
@@ -2951,6 +2955,11 @@ async function openBookSeatModal(tripId) {
 
     updateSeatFareQuote();
 
+    let pickupLat = "";
+    let pickupLng = "";
+    let dropoffLat = "";
+    let dropoffLng = "";
+
     try {
         const srcRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(trip.source)}&limit=1&countrycodes=in`, {
             headers: { 'Accept-Language': 'en' }
@@ -2963,31 +2972,31 @@ async function openBookSeatModal(tripId) {
             const srcData = await srcRes.json();
             const destData = await destRes.json();
 
-            let updated = false;
             if (srcData.length > 0) {
-                const latEl = document.getElementById('seat-pickup-lat');
-                const lngEl = document.getElementById('seat-pickup-lng');
-                if (latEl && lngEl) {
-                    latEl.value = srcData[0].lat;
-                    lngEl.value = srcData[0].lon;
-                    updated = true;
-                }
+                pickupLat = srcData[0].lat;
+                pickupLng = srcData[0].lon;
             }
             if (destData.length > 0) {
-                const latEl = document.getElementById('seat-dropoff-lat');
-                const lngEl = document.getElementById('seat-dropoff-lng');
-                if (latEl && lngEl) {
-                    latEl.value = destData[0].lat;
-                    lngEl.value = destData[0].lon;
-                    updated = true;
-                }
+                dropoffLat = destData[0].lat;
+                dropoffLng = destData[0].lon;
             }
 
-            if (updated) {
-                if (window.initSeatBookingMap) {
-                    window.initSeatBookingMap();
-                }
+            const lat1El = document.getElementById('seat-pickup-lat');
+            const lng1El = document.getElementById('seat-pickup-lng');
+            const lat2El = document.getElementById('seat-dropoff-lat');
+            const lng2El = document.getElementById('seat-dropoff-lng');
+
+            if (lat1El && lng1El && lat2El && lng2El) {
+                lat1El.value = pickupLat;
+                lng1El.value = pickupLng;
+                lat2El.value = dropoffLat;
+                lng2El.value = dropoffLng;
             }
+
+            if (window.initSeatBookingMap) {
+                window.initSeatBookingMap();
+            }
+            updateSeatFareQuote();
         }
     } catch (e) {
         console.error("Geocoding failed for trip: ", e);
