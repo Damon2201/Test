@@ -88,11 +88,14 @@ public class ParcelService {
                 .build();
     }
 
+    @Transactional
     public ParcelRequest createParcelRequest(ParcelBookingRequest req) {
         User sender = userRepository.findById(req.getSenderId())
                 .orElseThrow(() -> new RuntimeException("Sender not found with id: " + req.getSenderId()));
 
         Long tripIdVal = req.getTripId();
+        double reqWeight = req.getEstimatedWeightKg() != null ? req.getEstimatedWeightKg() : 0.0;
+        
         if (tripIdVal == null) {
             // Auto-matching: Find the first matching PLANNED trip departing in the future with available capacity
             List<Trip> activeTrips = tripRepository.findByStatus(Trip.TripStatus.PLANNED);
@@ -100,7 +103,6 @@ public class ParcelService {
             for (Trip t : activeTrips) {
                 if (matchesLocation(t.getSource(), req.getPickupLocation()) &&
                     matchesLocation(t.getDestination(), req.getDropoffLocation())) {
-                    double reqWeight = req.getEstimatedWeightKg() != null ? req.getEstimatedWeightKg() : 0.0;
                     if (t.getAvailableCapacityKg() >= reqWeight) {
                         if (t.getDepartureTime().isAfter(java.time.LocalDateTime.now())) {
                             if (matched == null || t.getDepartureTime().isBefore(matched.getDepartureTime())) {
@@ -111,15 +113,26 @@ public class ParcelService {
                 }
             }
             if (matched != null) {
-                tripIdVal = matched.getId();
+                // Lock the matched trip and verify capacity double-check
+                Trip lockedTrip = tripRepository.findByIdForUpdate(matched.getId()).orElse(null);
+                if (lockedTrip != null && lockedTrip.getAvailableCapacityKg() >= reqWeight) {
+                    tripIdVal = lockedTrip.getId();
+                    lockedTrip.setAvailableCapacityKg(Math.max(0.0, lockedTrip.getAvailableCapacityKg() - reqWeight));
+                    tripRepository.save(lockedTrip);
+                }
             }
         } else {
             final Long lookupTripId = tripIdVal;
-            Trip trip = tripRepository.findById(lookupTripId)
+            Trip trip = tripRepository.findByIdForUpdate(lookupTripId)
                     .orElseThrow(() -> new RuntimeException("Trip not found with id: " + lookupTripId));
             if (trip.getStatus() != Trip.TripStatus.PLANNED) {
                 throw new IllegalStateException("Trip is not in PLANNED status!");
             }
+            if (trip.getAvailableCapacityKg() < reqWeight) {
+                throw new IllegalStateException("Trip does not have enough capacity!");
+            }
+            trip.setAvailableCapacityKg(Math.max(0.0, trip.getAvailableCapacityKg() - reqWeight));
+            tripRepository.save(trip);
         }
 
         final Long finalTripId = tripIdVal;
@@ -358,10 +371,19 @@ public class ParcelService {
             throw new IllegalStateException("Cannot cancel a completed/delivered parcel request!");
         }
 
+        double reqWeight = request.getEstimatedWeightKg() != null ? request.getEstimatedWeightKg() : 0.0;
+
         if (userId.equals(request.getSenderId())) {
             // Sender is cancelling: Cancel permanently and refund
             request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);
             parcelRequestRepository.save(request);
+
+            if (request.getTripId() != null) {
+                tripRepository.findByIdForUpdate(request.getTripId()).ifPresent(trip -> {
+                    trip.setAvailableCapacityKg(trip.getAvailableCapacityKg() + reqWeight);
+                    tripRepository.save(trip);
+                });
+            }
 
             paymentRepository.findByParcelRequestId(parcelRequestId).ifPresent(payment -> {
                 if (payment.getStatus() == Payment.EscrowStatus.HELD) {
@@ -374,6 +396,14 @@ public class ParcelService {
 
         // Traveler is rejecting/cancelling: auto-route to next traveler
         Long previousTripId = request.getTripId();
+
+        // Release capacity on the old trip
+        if (previousTripId != null) {
+            tripRepository.findByIdForUpdate(previousTripId).ifPresent(trip -> {
+                trip.setAvailableCapacityKg(trip.getAvailableCapacityKg() + reqWeight);
+                tripRepository.save(trip);
+            });
+        }
 
         List<Trip> activeTrips = tripRepository.findByStatus(Trip.TripStatus.PLANNED);
         Trip nextMatched = null;
@@ -396,7 +426,6 @@ public class ParcelService {
             }
             if (matchesLocation(t.getSource(), request.getPickupLocation()) &&
                 matchesLocation(t.getDestination(), request.getDropoffLocation())) {
-                double reqWeight = request.getEstimatedWeightKg() != null ? request.getEstimatedWeightKg() : 0.0;
                 if (t.getAvailableCapacityKg() >= reqWeight) {
                     if (t.getDepartureTime().isAfter(java.time.LocalDateTime.now())) {
                         if (nextMatched == null || t.getDepartureTime().isBefore(nextMatched.getDepartureTime())) {
@@ -408,9 +437,26 @@ public class ParcelService {
         }
 
         if (nextMatched != null) {
-            request.setTripId(nextMatched.getId());
-            request.setStatus(ParcelRequest.ParcelStatus.CREATED);
-            parcelRequestRepository.save(request);
+            Trip lockedNextTrip = tripRepository.findByIdForUpdate(nextMatched.getId()).orElse(null);
+            if (lockedNextTrip != null && lockedNextTrip.getAvailableCapacityKg() >= reqWeight) {
+                request.setTripId(lockedNextTrip.getId());
+                request.setStatus(ParcelRequest.ParcelStatus.CREATED);
+                parcelRequestRepository.save(request);
+
+                lockedNextTrip.setAvailableCapacityKg(Math.max(0.0, lockedNextTrip.getAvailableCapacityKg() - reqWeight));
+                tripRepository.save(lockedNextTrip);
+            } else {
+                request.setTripId(null);
+                request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);
+                parcelRequestRepository.save(request);
+
+                paymentRepository.findByParcelRequestId(parcelRequestId).ifPresent(payment -> {
+                    if (payment.getStatus() == Payment.EscrowStatus.HELD) {
+                        payment.setStatus(Payment.EscrowStatus.REFUNDED);
+                        paymentRepository.save(payment);
+                    }
+                });
+            }
         } else {
             request.setTripId(null);
             request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);

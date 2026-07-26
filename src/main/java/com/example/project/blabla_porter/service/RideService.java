@@ -302,7 +302,7 @@ public class RideService {
             throw new IllegalStateException("Ride request must be in REQUESTED status to complete payment!");
         }
 
-        Trip trip = tripRepository.findById(ride.getTripId())
+        Trip trip = tripRepository.findByIdForUpdate(ride.getTripId())
                 .orElseThrow(() -> new RuntimeException("Trip not found"));
 
         if (trip.getAvailableSeats() == null || trip.getAvailableSeats() <= 0) {
@@ -389,7 +389,7 @@ public class RideService {
             RideRequest saved = rideRequestRepository.save(ride);
 
             // Increment available seats back on the trip
-            tripRepository.findById(ride.getTripId()).ifPresent(trip -> {
+            tripRepository.findByIdForUpdate(ride.getTripId()).ifPresent(trip -> {
                 if (trip.getAvailableSeats() != null) {
                     trip.setAvailableSeats(trip.getAvailableSeats() + 1);
                     tripRepository.save(trip);
