@@ -567,9 +567,7 @@ function renderApp() {
         
         // Initialize default tab if empty
         if (!currentCustomerTab) {
-            if (currentUser.role === 'TRAVELER' && hasTravelerCap) {
-                currentCustomerTab = 'captain';
-            } else if (currentUser.role === 'RIDER') {
+            if (currentUser.role === 'RIDER') {
                 currentCustomerTab = 'carpool';
             } else {
                 currentCustomerTab = 'parcel';
@@ -578,19 +576,17 @@ function renderApp() {
 
         switch (currentCustomerTab) {
             case 'parcel':
-                mainContentHtml = renderSenderPortal();
+                mainContentHtml = hasTravelerCap ? renderCaptainParcelPortal() : renderSenderPortal();
                 break;
             case 'carpool':
+                mainContentHtml = hasTravelerCap ? renderCaptainCarpoolPortal() : renderRiderPortal();
+                break;
             case 'taxi':
-                mainContentHtml = renderRiderPortal();
+                mainContentHtml = hasTravelerCap ? renderCaptainTaxiPortal() : renderRiderPortal();
                 break;
             case 'captain':
-                if (hasTravelerCap) {
-                    mainContentHtml = renderCaptainPortal();
-                } else {
-                    currentCustomerTab = 'parcel';
-                    mainContentHtml = renderSenderPortal();
-                }
+                currentCustomerTab = 'parcel';
+                mainContentHtml = hasTravelerCap ? renderCaptainParcelPortal() : renderSenderPortal();
                 break;
             case 'profile':
                 mainContentHtml = renderCustomerProfile();
@@ -619,12 +615,6 @@ function renderApp() {
                     <span class="nav-icon">🚖</span>
                     <span>Local Taxi</span>
                 </button>
-                ${hasTravelerCap ? `
-                    <button class="bottom-nav-item ${currentCustomerTab === 'captain' ? 'active' : ''}" onclick="switchCustomerTab('captain')">
-                        <span class="nav-icon">👨‍✈️</span>
-                        <span>Captain</span>
-                    </button>
-                ` : ''}
                 <button class="bottom-nav-item ${currentCustomerTab === 'profile' ? 'active' : ''}" onclick="switchCustomerTab('profile')">
                     <span class="nav-icon">👤</span>
                     <span>Profile</span>
@@ -727,6 +717,440 @@ function renderSenderPortal() {
         </div>
     `;
 }
+
+// ----------------------------------------------------------------------------
+// Captain-Specific Role-Guarded Dashboards
+// ----------------------------------------------------------------------------
+function renderKycRequiredScreen(kycStatus) {
+    return `
+        <div class="hero-card">
+            <div class="hero-header">
+                <div class="hero-subtitle">🚗 Captain / Traveler Driver Portal</div>
+                <h1 class="hero-title">Driver KYC Document Verification</h1>
+            </div>
+        </div>
+        <div class="route-card" style="max-width: 600px; margin: 0 auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h2 style="font-size:20px; font-weight:800;">🪪 Driver Verification Required</h2>
+                <span class="verified-badge" style="background:rgba(245,158,11,0.15); color:var(--warning);">STATUS: ${kycStatus}</span>
+            </div>
+            <p style="font-size:13px; color:var(--text-body); margin-bottom:24px; line-height:1.5;">
+                ⚠️ Mandatory Driver Protocol: Captains must submit Aadhaar, PAN, Driving Licence, and Vehicle RC to obtain Admin approval before publishing trips.
+            </p>
+            <form id="captain-kyc-form">
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">Aadhaar Card (12 Digits)</label>
+                    <input type="text" id="kyc-aadhaar" class="form-control" style="padding-left:16px;" value="1234-5678-9012" required />
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">PAN Card Number</label>
+                    <input type="text" id="kyc-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" required />
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">Driving Licence Number</label>
+                    <input type="text" id="kyc-dl" class="form-control" style="padding-left:16px;" value="DL-12345-KAR" required />
+                </div>
+                <div class="form-group" style="margin-bottom:24px;">
+                    <label class="form-label">Vehicle RC Number</label>
+                    <input type="text" id="kyc-rc" class="form-control" style="padding-left:16px;" value="KA-01-AB-1234" required />
+                </div>
+                <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green);">Submit KYC Documents</button>
+            </form>
+        </div>
+    `;
+}
+
+function renderCaptainParcelPortal() {
+    const kycStatus = currentUser.kycStatus || 'NOT_SUBMITTED';
+    if (kycStatus !== 'APPROVED') {
+        return renderKycRequiredScreen(kycStatus);
+    }
+
+    return `
+        <div class="hero-card">
+            <div class="hero-header">
+                <div class="hero-subtitle">📦 Captain Inter-City Freight Dashboard</div>
+                <h1 class="hero-title">Manage Cargo Bookings & Handover</h1>
+            </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom:40px;">
+            <div class="route-card">
+                <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📍 Publish Inter-City Route</h2>
+                <form id="captain-publish-form">
+                    <div class="form-group" style="margin-bottom:14px; position:relative;">
+                        <label class="form-label">Origin City</label>
+                        <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" autocomplete="off" required />
+                        <div id="pub-origin-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
+                    </div>
+                    <div class="form-group" style="margin-bottom:14px; position:relative;">
+                        <label class="form-label">Destination City</label>
+                        <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" autocomplete="off" required />
+                        <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
+                        <div class="form-group">
+                            <label class="form-label">Trunk Space (kg)</label>
+                            <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="25.0" step="0.5" required />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Seats</label>
+                            <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" value="3" required />
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-search" style="width:100%;">Publish Route</button>
+                </form>
+            </div>
+            <div class="route-card">
+                <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📡 Live Telemetry GPS Broadcaster</h2>
+                <div id="telemetry-map" style="height:180px; border-radius:12px; margin-bottom:12px; border:1px solid var(--border); z-index:1;"></div>
+                <form id="gps-broadcast-form">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
+                        <div>
+                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Latitude</label>
+                            <input type="number" id="gps-lat" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="12.9716" step="0.0001" required />
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Longitude</label>
+                            <input type="number" id="gps-lng" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="77.5946" step="0.0001" required />
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Speed (km/h)</label>
+                            <input type="number" id="gps-speed" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="85.0" step="0.1" required />
+                        </div>
+                    </div>
+                    <button type="button" id="btn-device-gps" class="btn-search" style="width:100%; margin-bottom:10px; background:var(--bg-surface); color:var(--text-title); border:1px solid var(--border);">📍 Use Device GPS</button>
+                    <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient);">Broadcast Live GPS Telemetry</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="section-header">
+            <h2 class="section-title">My Published Trips</h2>
+            <span class="section-tag">Active Routes</span>
+        </div>
+        <div id="captain-trips-list-container" class="cards-grid" style="margin-bottom:32px;">
+            <div style="color:var(--text-body); padding:20px;">Loading published trips...</div>
+        </div>
+
+        <div class="section-header">
+            <h2 class="section-title">Manage Cargo Bookings & Handover Verification</h2>
+            <span class="section-tag">Fulfill Accepted Deliveries</span>
+        </div>
+        <div id="captain-parcels-container" class="cards-grid" style="margin-bottom:32px;">
+            <div style="color:var(--text-body); padding:40px;">Loading cargo list...</div>
+        </div>
+    `;
+}
+
+function renderCaptainCarpoolPortal() {
+    const kycStatus = currentUser.kycStatus || 'NOT_SUBMITTED';
+    if (kycStatus !== 'APPROVED') {
+        return renderKycRequiredScreen(kycStatus);
+    }
+
+    return `
+        <div class="hero-card">
+            <div class="hero-header">
+                <div class="hero-subtitle">🚗 Captain Passenger Carpool Dashboard</div>
+                <h1 class="hero-title">Manage Passenger Seat Bookings</h1>
+            </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom:40px;">
+            <div class="route-card">
+                <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📍 Publish Inter-City Route</h2>
+                <form id="captain-publish-form">
+                    <div class="form-group" style="margin-bottom:14px; position:relative;">
+                        <label class="form-label">Origin City</label>
+                        <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" autocomplete="off" required />
+                        <div id="pub-origin-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
+                    </div>
+                    <div class="form-group" style="margin-bottom:14px; position:relative;">
+                        <label class="form-label">Destination City</label>
+                        <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" autocomplete="off" required />
+                        <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
+                        <div class="form-group">
+                            <label class="form-label">Trunk Space (kg)</label>
+                            <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="25.0" step="0.5" required />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Seats</label>
+                            <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" value="3" required />
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-search" style="width:100%;">Publish Route</button>
+                </form>
+            </div>
+            <div class="route-card">
+                <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📡 Live Telemetry GPS Broadcaster</h2>
+                <div id="telemetry-map" style="height:180px; border-radius:12px; margin-bottom:12px; border:1px solid var(--border); z-index:1;"></div>
+                <form id="gps-broadcast-form">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
+                        <div>
+                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Latitude</label>
+                            <input type="number" id="gps-lat" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="12.9716" step="0.0001" required />
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Longitude</label>
+                            <input type="number" id="gps-lng" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="77.5946" step="0.0001" required />
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Speed (km/h)</label>
+                            <input type="number" id="gps-speed" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="85.0" step="0.1" required />
+                        </div>
+                    </div>
+                    <button type="button" id="btn-device-gps" class="btn-search" style="width:100%; margin-bottom:10px; background:var(--bg-surface); color:var(--text-title); border:1px solid var(--border);">📍 Use Device GPS</button>
+                    <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient);">Broadcast Live GPS Telemetry</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="section-header">
+            <h2 class="section-title">My Published Trips</h2>
+            <span class="section-tag">Active Routes</span>
+        </div>
+        <div id="captain-trips-list-carpool-container" class="cards-grid" style="margin-bottom:32px;">
+            <div style="color:var(--text-body); padding:20px;">Loading published trips...</div>
+        </div>
+
+        <div class="section-header">
+            <h2 class="section-title">💺 Incoming Passenger Seat Bookings</h2>
+            <span class="section-tag">Fulfill Accepted Rides</span>
+        </div>
+        <div id="captain-rides-container" class="cards-grid" style="margin-bottom:32px;">
+            <div style="color:var(--text-body); padding:40px;">Loading seat requests...</div>
+        </div>
+    `;
+}
+
+function renderCaptainTaxiPortal() {
+    const kycStatus = currentUser.kycStatus || 'NOT_SUBMITTED';
+    if (kycStatus !== 'APPROVED') {
+        return renderKycRequiredScreen(kycStatus);
+    }
+
+    return `
+        <div class="hero-card">
+            <div class="hero-header">
+                <div class="hero-subtitle">🚖 Same-City Local Taxi Mode</div>
+                <h1 class="hero-title">Toggle Local Availability & Accept Assignments</h1>
+            </div>
+        </div>
+        <div class="route-card" style="margin-bottom:40px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="font-size:18px; font-weight:800; color:var(--text-white);">Toggle Local Availability</h3>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="local-taxi-available-toggle" onchange="toggleLocalTaxiAvailabilityBtn(this.checked)" style="transform:scale(1.2);" />
+                    <span style="font-weight:700; font-size:13px; color:var(--danger);" id="local-taxi-toggle-label">OFFLINE</span>
+                </label>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:12px;">
+                <div>
+                    <label class="form-label">Current Latitude</label>
+                    <input type="number" id="local-gps-lat" class="form-control" value="12.9716" step="0.0001" onchange="updateLocalGpsCoordinates()" />
+                </div>
+                <div>
+                    <label class="form-label">Current Longitude</label>
+                    <input type="number" id="local-gps-lng" class="form-control" value="77.5946" step="0.0001" onchange="updateLocalGpsCoordinates()" />
+                </div>
+            </div>
+            <button type="button" class="btn-search" style="width:100%; margin-bottom:20px; background:var(--bg-surface); color:var(--text-title); border:1px solid var(--border);" onclick="useLocalDeviceGps()">📍 Use Current Location</button>
+            
+            <h4 style="font-size:14px; font-weight:800; margin-top:24px; margin-bottom:12px; color:var(--porter-teal);">Active Local Taxi Assignments</h4>
+            <div id="captain-local-bookings-container">
+                <div style="color:var(--text-muted); font-size:13px;">No active local assignments. Make yourself available above.</div>
+            </div>
+        </div>
+    `;
+}
+
+async function fetchTripsForCaptainDashboard() {
+    const containers = [
+        document.getElementById('captain-trips-list-container'),
+        document.getElementById('captain-trips-list-carpool-container')
+    ];
+    if (!containers.some(c => c !== null)) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/trips`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error();
+        const allTrips = await res.json();
+        const captainTrips = allTrips.filter(t => t.travelerId === currentUser.id);
+
+        containers.forEach(container => {
+            if (!container) return;
+            container.innerHTML = '';
+            if (captainTrips.length === 0) {
+                container.innerHTML = `<div style="color:var(--text-muted); padding:30px; text-align:center;">You have no published routes. Use the form above to post one.</div>`;
+                return;
+            }
+
+            captainTrips.forEach(t => {
+                const card = document.createElement('div');
+                card.className = 'route-card';
+                card.innerHTML = `
+                    <div class="card-top">
+                        <div>
+                            <span style="font-size:11px; color:var(--text-muted); font-weight:700;">TRIP ID: #${t.id}</span>
+                            <h3 style="font-size:16px; font-weight:800; margin-top:2px;">${escapeHtml(t.source)} ➔ ${escapeHtml(t.destination)}</h3>
+                        </div>
+                        <span class="verified-badge" style="background:rgba(16,185,129,0.15); color:var(--accent-green); border-color:rgba(16,185,129,0.3);">${escapeHtml(t.status)}</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-body); margin:12px 0;">
+                        <div><b>Departure:</b> ${new Date(t.departureTime).toLocaleString()}</div>
+                        <div><b>Trunk Capacity:</b> ${t.availableCapacityKg} kg Remaining</div>
+                        <div><b>Passenger Seats:</b> ${t.availableSeats} Remaining</div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        });
+    } catch (err) {
+        console.error(err);
+        containers.forEach(container => {
+            if (container) {
+                container.innerHTML = `<div style="color:var(--danger); padding:20px;">Error loading published routes</div>`;
+            }
+        });
+    }
+}
+
+async function fetchRidesForCaptain() {
+    const container = document.getElementById('captain-rides-container');
+    if (!container) return;
+
+    try {
+        const tripsRes = await fetch(`${API_BASE}/trips`, { headers: getAuthHeaders() });
+        if (!tripsRes.ok) throw new Error();
+        const allTrips = await tripsRes.json();
+        const captainTrips = allTrips.filter(t => t.travelerId === currentUser.id);
+
+        container.innerHTML = '';
+        if (captainTrips.length === 0) {
+            container.innerHTML = `<div style="color:var(--text-muted); padding:30px; text-align:center;">Publish a route to see seat requests.</div>`;
+            return;
+        }
+
+        let bookingsFound = false;
+
+        for (const trip of captainTrips) {
+            const res = await fetch(`${API_BASE}/rides/trip/${trip.id}`, { headers: getAuthHeaders() });
+            if (!res.ok) continue;
+            const rides = await res.json();
+
+            if (rides && rides.length > 0) {
+                bookingsFound = true;
+                rides.forEach(r => {
+                    const card = document.createElement('div');
+                    card.className = 'route-card';
+
+                    let actionBtnHtml = '';
+                    if (r.status === 'REQUESTED') {
+                        actionBtnHtml = `
+                            <button class="btn-book" style="background:var(--primary-gradient); box-shadow:0 4px 15px var(--primary-glow); margin-right:8px;" onclick="acceptPassengerRide(${r.id})">Accept</button>
+                        `;
+                    } else if (r.status === 'ACCEPTED') {
+                        actionBtnHtml = `
+                            <button class="btn-book" style="background:var(--accent-green); margin-right:8px;" onclick="startPassengerRide(${r.id})">Start Ride</button>
+                        `;
+                    } else if (r.status === 'IN_PROGRESS') {
+                        actionBtnHtml = `
+                            <button class="btn-book" style="background:var(--porter-gradient);" onclick="completePassengerRide(${r.id})">Complete Ride</button>
+                        `;
+                    } else if (r.status === 'COMPLETED') {
+                        actionBtnHtml = `<span style="font-weight:700; color:var(--accent-green); font-size:13px;">✅ Completed</span>`;
+                    } else if (r.status === 'CANCELLED') {
+                        actionBtnHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled</span>`;
+                    }
+
+                    card.innerHTML = `
+                        <div class="card-top">
+                            <div>
+                                <span style="font-size:11px; color:var(--text-muted); font-weight:700;">RIDE ID: #${r.id}</span>
+                                <h3 style="font-size:16px; font-weight:800; margin-top:2px;">Co-Ride Assignment</h3>
+                            </div>
+                            <span class="verified-badge" style="text-transform:uppercase;">${escapeHtml(r.status)}</span>
+                        </div>
+                        <div style="font-size:12px; color:var(--text-body); margin-bottom:12px;">
+                            <div style="background:var(--bg-surface); padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid var(--border);">
+                                <div style="color:var(--text-white); font-weight:700; margin-bottom:4px;">👤 Passenger Details</div>
+                                <div style="font-size:11px; color:var(--text-white);">Name: <b>${escapeHtml(getUserName(r.riderId))}</b></div>
+                                <div style="font-size:11px; color:var(--text-white);">Mobile: <b>${escapeHtml(getUserMobile(r.riderId))}</b></div>
+                            </div>
+                            <div><b>Route:</b> ${escapeHtml(r.pickupLocation)} ➔ ${escapeHtml(r.dropoffLocation)}</div>
+                        </div>
+                        <div class="card-footer" style="margin-top:14px; padding-top:12px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border);">
+                            <span class="price-amount" style="font-size:18px;">₹${Math.round(r.calculatedFare)}</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                ${actionBtnHtml}
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            }
+        }
+
+        if (!bookingsFound) {
+            container.innerHTML = `<div style="color:var(--text-muted); padding:30px; text-align:center;">No pending seat requests for your trips yet.</div>`;
+        }
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = `<div style="color:var(--danger); padding:40px;">Error loading seat requests</div>`;
+    }
+}
+
+window.acceptPassengerRide = async function(rideId) {
+    try {
+        const res = await fetch(`${API_BASE}/rides/${rideId}/accept?travelerId=${currentUser.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            showToast('Passenger Ride Request Accepted!', 'success');
+            renderApp();
+        } else {
+            showToast('Failed to accept ride request', 'error');
+        }
+    } catch (err) {
+        showToast('Error accepting ride request', 'error');
+    }
+};
+
+window.startPassengerRide = async function(rideId) {
+    try {
+        const res = await fetch(`${API_BASE}/rides/${rideId}/start`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            showToast('Ride started successfully!', 'success');
+            renderApp();
+        } else {
+            showToast('Failed to start ride', 'error');
+        }
+    } catch (err) {
+        showToast('Error starting ride', 'error');
+    }
+};
+
+window.completePassengerRide = async function(rideId) {
+    try {
+        const res = await fetch(`${API_BASE}/rides/${rideId}/complete`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            showToast('Ride completed successfully!', 'success');
+            renderApp();
+        } else {
+            showToast('Failed to complete ride', 'error');
+        }
+    } catch (err) {
+        showToast('Error completing ride', 'error');
+    }
+};
 
 // ----------------------------------------------------------------------------
 // 2. CAPTAIN / TRAVELER PORTAL (Rendered ONLY for TRAVELER role)
@@ -1748,6 +2172,16 @@ function bindPostRenderListeners() {
         fetchParcelsForCaptain();
     }
 
+    const captainTripsListContainer = document.getElementById('captain-trips-list-container') || document.getElementById('captain-trips-list-carpool-container');
+    if (captainTripsListContainer) {
+        fetchTripsForCaptainDashboard();
+    }
+
+    const captainRidesContainer = document.getElementById('captain-rides-container');
+    if (captainRidesContainer) {
+        fetchRidesForCaptain();
+    }
+
     const adminKycContainer = document.getElementById('admin-kyc-queue-container');
     if (adminKycContainer) {
         fetchPendingKycForAdmin();
@@ -2095,6 +2529,7 @@ async function fetchTripsForSender() {
 
         trips.forEach(trip => {
             if (trip.status !== 'PLANNED') return;
+            if (currentUser && trip.travelerId === currentUser.id) return;
             const card = document.createElement('div');
             card.className = 'route-card';
             
@@ -2140,6 +2575,7 @@ async function fetchTripsForSender() {
 }
 
 async function fetchParcelsForSender() {
+    if (!currentUser) return;
     const container = document.getElementById('sender-parcels-container');
     if (!container) return;
 
@@ -2245,6 +2681,7 @@ async function fetchParcelsForSender() {
 }
 
 async function fetchParcelsForCaptain() {
+    if (!currentUser) return;
     const container = document.getElementById('captain-parcels-container');
     if (!container) return;
 
@@ -3285,6 +3722,7 @@ function renderFilteredRiderTrips() {
     const destQuery = destInput ? destInput.value.trim().toLowerCase() : '';
 
     const filtered = loadedTrips.filter(t => {
+        if (currentUser && t.travelerId === currentUser.id) return false;
         if (!t.availableSeats || t.availableSeats <= 0) return false;
         if (t.status !== 'PLANNED' && t.status !== 'ACTIVE') return false;
 
@@ -3359,6 +3797,7 @@ function triggerRiderSearch() {
 }
 
 async function fetchRidesForRider() {
+    if (!currentUser) return;
     const container = document.getElementById('rider-rides-container');
     if (!container) return;
 
@@ -3487,6 +3926,7 @@ async function fetchRidesForRider() {
 }
 
 async function fetchTrustedContactsForRider() {
+    if (!currentUser) return;
     const container = document.getElementById('rider-contacts-container');
     if (!container) return;
 
@@ -4564,6 +5004,7 @@ async function openLocalTaxiTrackingModal(bookingId) {
 
 let localTaxiAvailable = false;
 async function fetchLocalCaptainStatus() {
+    if (!currentUser) return;
     try {
         const res = await fetch(`${API_BASE}/taxi/captain/status/${currentUser.id}`, { headers: getAuthHeaders() });
         if (res.ok) {
@@ -4625,7 +5066,34 @@ async function updateLocalGpsCoordinates() {
     toggleLocalTaxiAvailabilityBtn(localTaxiAvailable, true);
 }
 
+window.useLocalDeviceGps = function() {
+    if (!navigator.geolocation) {
+        showToast('Geolocation is not supported by your browser.', 'error');
+        return;
+    }
+    showToast('Fetching current location...', 'info');
+    navigator.geolocation.getCurrentPosition(position => {
+        const latVal = position.coords.latitude;
+        const lngVal = position.coords.longitude;
+
+        const latEl = document.getElementById('local-gps-lat');
+        const lngEl = document.getElementById('local-gps-lng');
+        if (latEl) latEl.value = latVal.toFixed(6);
+        if (lngEl) lngEl.value = lngVal.toFixed(6);
+
+        toggleLocalTaxiAvailabilityBtn(localTaxiAvailable, true);
+    }, error => {
+        console.error(error);
+        showToast('Unable to retrieve location. Please check browser permissions.', 'error');
+    }, {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+    });
+};
+
 async function fetchCaptainLocalBookings() {
+    if (!currentUser) return;
     const container = document.getElementById('captain-local-bookings-container');
     if (!container) return;
 
