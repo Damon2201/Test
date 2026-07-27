@@ -11,4 +11,5 @@ public interface LocalTaxiBookingRepository extends JpaRepository<LocalTaxiBooki
     List<LocalTaxiBooking> findByRiderId(Long riderId);
     List<LocalTaxiBooking> findByCaptainId(Long captainId);
     java.util.Optional<LocalTaxiBooking> findByTripId(Long tripId);
+    java.util.Optional<LocalTaxiBooking> findByRazorpayOrderId(String razorpayOrderId);
 }

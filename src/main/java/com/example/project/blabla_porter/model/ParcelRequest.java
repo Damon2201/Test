@@ -61,6 +61,10 @@ public class ParcelRequest {
     @Column(nullable = false)
     private ParcelStatus status;
 
+    private String razorpayOrderId;
+    private String razorpayPaymentId;
+    private String razorpaySignature;
+
     private Double calculatedFare;
     private LocalDateTime createdAt;
 

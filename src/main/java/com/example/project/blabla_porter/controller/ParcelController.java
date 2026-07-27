@@ -31,8 +31,12 @@ public class ParcelController {
     public com.example.project.blabla_porter.dto.FareBreakdownDTO getFareQuote(
             @RequestParam(required = false) Double declaredValue,
             @RequestParam(required = false) Double distanceKm,
-            @RequestParam(required = false) Double weightKg) {
-        return parcelService.getFareQuote(declaredValue, distanceKm, weightKg);
+            @RequestParam(required = false) Double weightKg,
+            @RequestParam(required = false) Double pickupLat,
+            @RequestParam(required = false) Double pickupLng,
+            @RequestParam(required = false) Double dropoffLat,
+            @RequestParam(required = false) Double dropoffLng) {
+        return parcelService.getFareQuote(declaredValue, distanceKm, weightKg, pickupLat, pickupLng, dropoffLat, dropoffLng);
     }
 
     @PutMapping("/{id}/accept")

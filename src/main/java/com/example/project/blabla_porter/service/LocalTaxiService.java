@@ -40,6 +40,9 @@ public class LocalTaxiService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private OsrmRoutingService osrmRoutingService;
+
     @Transactional
     public LocalCaptainStatus toggleAvailability(Long captainId, boolean available, Double latitude, Double longitude) {
         User user = userRepository.findById(captainId)
@@ -94,15 +97,17 @@ public class LocalTaxiService {
         }
 
         // Fare Calculation
-        double distance = calculateDistance(pickupLat, pickupLng, dropoffLat, dropoffLng);
-        double estDurationMinutes = distance * 3.0; // 3 mins per Km estimation
-
+        double distance = osrmRoutingService.getRouteDistance(pickupLat, pickupLng, dropoffLat, dropoffLng);
         double baseFare = 20.0;
         double distanceFare = 0.0;
+        double durationFare = 0.0;
+
         if (distance > 2.0) {
             distanceFare = (distance - 2.0) * 10.0;
+            double excessDurationMinutes = (distance - 2.0) * 3.0; // 3 mins per excess Km estimation
+            durationFare = excessDurationMinutes * 1.00;
         }
-        double durationFare = estDurationMinutes * 1.00;
+
         double platformFee = 5.0;
         double totalFare = baseFare + distanceFare + durationFare + platformFee;
 

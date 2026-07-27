@@ -58,6 +58,16 @@ public class ParcelService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private OsrmRoutingService osrmRoutingService;
+
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private ParcelService self;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
     private static final SecureRandom RANDOM = new SecureRandom();
 
     public com.example.project.blabla_porter.dto.FareBreakdownDTO getFareQuote(Double declaredValue, Double estimatedDistanceKm) {
@@ -65,9 +75,21 @@ public class ParcelService {
     }
 
     public com.example.project.blabla_porter.dto.FareBreakdownDTO getFareQuote(Double declaredValue, Double estimatedDistanceKm, Double estimatedWeightKg) {
+        return getFareQuote(declaredValue, estimatedDistanceKm, estimatedWeightKg, null, null, null, null);
+    }
+
+    public com.example.project.blabla_porter.dto.FareBreakdownDTO getFareQuote(
+            Double declaredValue, Double estimatedDistanceKm, Double estimatedWeightKg,
+            Double pickupLat, Double pickupLng, Double dropoffLat, Double dropoffLng) {
         double value = declaredValue != null ? declaredValue : 0.0;
-        double dist = estimatedDistanceKm != null ? estimatedDistanceKm : 350.0; // Default inter-city distance estimate
         double weight = estimatedWeightKg != null ? estimatedWeightKg : 4.0; // Default weight
+
+        double dist = 350.0; // Default fallback
+        if (pickupLat != null && pickupLng != null && dropoffLat != null && dropoffLng != null) {
+            dist = osrmRoutingService.getRouteDistance(pickupLat, pickupLng, dropoffLat, dropoffLng);
+        } else if (estimatedDistanceKm != null) {
+            dist = estimatedDistanceKm;
+        }
 
         double baseFare = pricingConfig.getBaseFareInr();
         double distanceFare = pricingConfig.calculateDistanceFare(dist);
@@ -88,8 +110,39 @@ public class ParcelService {
                 .build();
     }
 
-    @Transactional
     public ParcelRequest createParcelRequest(ParcelBookingRequest req) {
+        // Calculate distance OUTSIDE transaction to prevent holding DB locks/connections during network calls
+        long osrmStart = System.currentTimeMillis();
+        Double distance = 0.0;
+        if (req.getPickupLatitude() != null && req.getPickupLongitude() != null &&
+            req.getDropoffLatitude() != null && req.getDropoffLongitude() != null) {
+            distance = osrmRoutingService.getRouteDistance(
+                req.getPickupLatitude(), req.getPickupLongitude(),
+                req.getDropoffLatitude(), req.getDropoffLongitude()
+            );
+        } else {
+            distance = 0.0;
+        }
+        long osrmEnd = System.currentTimeMillis();
+        long osrmMs = osrmEnd - osrmStart;
+
+        long txStart = System.currentTimeMillis();
+        ParcelRequest result = self.createParcelRequestInTransaction(req, distance);
+        long txEnd = System.currentTimeMillis();
+        long txMs = txEnd - txStart;
+
+        long totalMs = txEnd - osrmStart;
+        if (totalMs > 2000) {
+            System.out.println(String.format("[PERF] SLOW REQUEST totalMs=%d | osrmMs=%d | txMs=%d | thread=%s",
+                totalMs, osrmMs, txMs, Thread.currentThread().getName()));
+        }
+
+        return result;
+    }
+
+    @Transactional
+    public ParcelRequest createParcelRequestInTransaction(ParcelBookingRequest req, double distance) {
+        long lockWaitStart = System.currentTimeMillis();
         User sender = userRepository.findById(req.getSenderId())
                 .orElseThrow(() -> new RuntimeException("Sender not found with id: " + req.getSenderId()));
 
@@ -115,16 +168,20 @@ public class ParcelService {
             if (matched != null) {
                 // Lock the matched trip and verify capacity double-check
                 Trip lockedTrip = tripRepository.findByIdForUpdate(matched.getId()).orElse(null);
-                if (lockedTrip != null && lockedTrip.getAvailableCapacityKg() >= reqWeight) {
-                    tripIdVal = lockedTrip.getId();
-                    lockedTrip.setAvailableCapacityKg(Math.max(0.0, lockedTrip.getAvailableCapacityKg() - reqWeight));
-                    tripRepository.save(lockedTrip);
+                if (lockedTrip != null) {
+                    entityManager.refresh(lockedTrip); // Bypass L1 Cache to load the committed database state
+                    if (lockedTrip.getAvailableCapacityKg() >= reqWeight) {
+                        tripIdVal = lockedTrip.getId();
+                        lockedTrip.setAvailableCapacityKg(Math.max(0.0, lockedTrip.getAvailableCapacityKg() - reqWeight));
+                        tripRepository.save(lockedTrip);
+                    }
                 }
             }
         } else {
             final Long lookupTripId = tripIdVal;
             Trip trip = tripRepository.findByIdForUpdate(lookupTripId)
                     .orElseThrow(() -> new RuntimeException("Trip not found with id: " + lookupTripId));
+            entityManager.refresh(trip); // Bypass L1 Cache to load the committed database state
             if (trip.getStatus() != Trip.TripStatus.PLANNED) {
                 throw new IllegalStateException("Trip is not in PLANNED status!");
             }
@@ -137,20 +194,13 @@ public class ParcelService {
 
         final Long finalTripId = tripIdVal;
 
-        // Calculate Fare using Centralized Pricing Config (Base + Distance + Category Tier Surcharge)
-        Double distance = 0.0;
         Double weight = req.getEstimatedWeightKg() != null ? req.getEstimatedWeightKg() : 4.0;
-        if (req.getPickupLatitude() != null && req.getPickupLongitude() != null &&
-            req.getDropoffLatitude() != null && req.getDropoffLongitude() != null) {
-            distance = calculateHaversineDistance(
-                req.getPickupLatitude(), req.getPickupLongitude(),
-                req.getDropoffLatitude(), req.getDropoffLongitude()
-            );
-        } else {
+        if (req.getPickupLatitude() == null || req.getPickupLongitude() == null ||
+            req.getDropoffLatitude() == null || req.getDropoffLongitude() == null) {
             // Legacy/Test compatibility: default distance to 0.0 and weight to 0.0 to match test assertions
-            distance = 0.0;
             weight = 0.0;
         }
+
         com.example.project.blabla_porter.dto.FareBreakdownDTO quote = getFareQuote(req.getDeclaredValue(), distance, weight);
 
         ParcelRequest request = ParcelRequest.builder()
@@ -526,6 +576,9 @@ public class ParcelService {
                 throw new RuntimeException("Failed to create Razorpay Order: " + e.getMessage(), e);
             }
         }
+        
+        request.setRazorpayOrderId(orderId);
+        parcelRequestRepository.save(request);
 
         return com.example.project.blabla_porter.dto.RazorpayOrderResponse.builder()
                 .keyId(keyIdToUse)
@@ -551,9 +604,10 @@ public class ParcelService {
         Trip trip = tripRepository.findById(request.getTripId())
                 .orElseThrow(() -> new RuntimeException("Trip not found"));
 
-        boolean isMock = req.getRazorpayOrderId() != null && req.getRazorpayOrderId().startsWith("order_mock_");
+        boolean isProduction = razorpayKeyId != null && !razorpayKeyId.isBlank() && razorpayKeySecret != null && !razorpayKeySecret.isBlank();
+        boolean isMock = !isProduction && req.getRazorpayOrderId() != null && req.getRazorpayOrderId().startsWith("order_mock_");
 
-        if (!isMock && razorpayKeyId != null && !razorpayKeyId.isBlank() && razorpayKeySecret != null && !razorpayKeySecret.isBlank()) {
+        if (isProduction) {
             // Verify payment signature
             try {
                 JSONObject options = new JSONObject();

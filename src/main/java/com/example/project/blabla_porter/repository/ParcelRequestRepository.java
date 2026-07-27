@@ -11,4 +11,5 @@ public interface ParcelRequestRepository extends JpaRepository<ParcelRequest, Lo
     List<ParcelRequest> findBySenderId(Long senderId);
     List<ParcelRequest> findByTripId(Long tripId);
     List<ParcelRequest> findByStatus(ParcelRequest.ParcelStatus status);
+    java.util.Optional<ParcelRequest> findByRazorpayOrderId(String razorpayOrderId);
 }

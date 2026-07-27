@@ -40,6 +40,9 @@ public class TrackingService {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
+    @Autowired
+    private OsrmRoutingService osrmRoutingService;
+
     private static final Map<String, double[]> CITY_COORDINATES = new HashMap<>();
 
     static {
@@ -264,18 +267,9 @@ public class TrackingService {
         response.setDestinationLatitude(destCoords[0]);
         response.setDestinationLongitude(destCoords[1]);
 
-        double distKm = calculateHaversineDistance(srcCoords[0], srcCoords[1], destCoords[0], destCoords[1]);
-        response.setTotalRouteDistanceKm(Math.round(distKm * 10.0) / 10.0);
-
-        // Generate 5 interpolated waypoints between source & destination
-        List<GpsPoint> waypoints = new ArrayList<>();
-        for (int i = 0; i <= 5; i++) {
-            double ratio = i / 5.0;
-            double lat = srcCoords[0] + (destCoords[0] - srcCoords[0]) * ratio;
-            double lng = srcCoords[1] + (destCoords[1] - srcCoords[1]) * ratio;
-            waypoints.add(new GpsPoint(lat, lng, LocalDateTime.now()));
-        }
-        response.setPolylineWaypoints(waypoints);
+        OsrmRoutingService.RouteDetails details = osrmRoutingService.getRouteDetails(srcCoords[0], srcCoords[1], destCoords[0], destCoords[1]);
+        response.setTotalRouteDistanceKm(Math.round(details.getDistanceKm() * 10.0) / 10.0);
+        response.setPolylineWaypoints(details.getWaypoints());
 
         return response;
     }

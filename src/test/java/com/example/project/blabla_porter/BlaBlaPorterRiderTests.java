@@ -106,10 +106,9 @@ public class BlaBlaPorterRiderTests {
         assertNotNull(ride);
         assertEquals(RideRequest.RideStatus.REQUESTED, ride.getStatus());
         
-        // Assert dynamic seat-fare for ~290 km: Base (50) + first 100km (100 * 1.5 = 150) + next 190km (190 * 1.0 = 190) = ₹390
-        // (Due to exact Haversine: 290.17 km -> base 50 + 150 + 190.17 = 390.17)
-        assertTrue(ride.getCalculatedFare() >= 390.0);
-        assertTrue(ride.getCalculatedFare() < 391.0);
+        // Assert dynamic seat-fare for OSRM-snapped driving distance (~326.78 km): Base 50 + first 100km (excess of 3km is 97 * 1.5 = 145.5) + next 226.78km (226.78 * 1.0 = 226.78) = ₹422.28
+        assertTrue(ride.getCalculatedFare() >= 422.0);
+        assertTrue(ride.getCalculatedFare() < 423.0);
 
         // Initiate escrow payment order
         RazorpayOrderResponse order = rideService.createRazorpayOrder(ride.getId(), rider.getId());

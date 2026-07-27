@@ -26,6 +26,24 @@ def authenticate():
         print(f"Auth failure: {e}")
     return None, None
 
+COORDINATE_PAIRS = [
+    {"name": "Bengaluru", "lat": 12.9716, "lng": 77.6412},
+    {"name": "Hyderabad", "lat": 17.4107, "lng": 78.4497},
+    {"name": "Mumbai", "lat": 19.1136, "lng": 72.8697},
+    {"name": "Delhi", "lat": 28.6304, "lng": 77.2177},
+    {"name": "Chennai", "lat": 13.0418, "lng": 80.2341},
+    {"name": "Kolkata", "lat": 22.5535, "lng": 88.3524},
+    {"name": "Pune", "lat": 18.5362, "lng": 73.8940},
+    {"name": "Ahmedabad", "lat": 23.0300, "lng": 72.5084},
+    {"name": "Jaipur", "lat": 26.9124, "lng": 75.7873},
+    {"name": "Lucknow", "lat": 26.8467, "lng": 80.9462},
+    {"name": "Kochi", "lat": 9.9678, "lng": 76.2996},
+    {"name": "Patna", "lat": 25.6112, "lng": 85.1276},
+    {"name": "Bhopal", "lat": 23.2156, "lng": 77.4406},
+    {"name": "Indore", "lat": 22.7533, "lng": 75.8937},
+    {"name": "Chandigarh", "lat": 30.7398, "lng": 76.7827}
+]
+
 def simulate_user_flow(token, sender_id, user_num):
     headers = {
         "Content-Type": "application/json",
@@ -51,6 +69,9 @@ def simulate_user_flow(token, sender_id, user_num):
         metrics["trips_status"] = "TIMEOUT/ERROR"
     metrics["trips_time"] = time.time() - t0
     
+    pickup = COORDINATE_PAIRS[(user_num - 1) % 15]
+    dropoff = COORDINATE_PAIRS[user_num % 15]
+    
     # 2. Book a Parcel (Auto-Match)
     payload = {
         "senderId": sender_id,
@@ -58,12 +79,12 @@ def simulate_user_flow(token, sender_id, user_num):
         "goodsDescription": f"Load Test Goods User {user_num}",
         "declaredValue": 5000.0,
         "estimatedWeightKg": 2.5,
-        "pickupLocation": "Indiranagar, Bengaluru",
-        "dropoffLocation": "Banjara Hills, Hyderabad",
-        "pickupLatitude": 12.9716,
-        "pickupLongitude": 77.6412,
-        "dropoffLatitude": 17.4107,
-        "dropoffLongitude": 78.4497
+        "pickupLocation": f"{pickup['name']} Location",
+        "dropoffLocation": f"{dropoff['name']} Location",
+        "pickupLatitude": pickup["lat"],
+        "pickupLongitude": pickup["lng"],
+        "dropoffLatitude": dropoff["lat"],
+        "dropoffLongitude": dropoff["lng"]
     }
     t0 = time.time()
     parcel_id = None

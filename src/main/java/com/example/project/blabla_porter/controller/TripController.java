@@ -11,12 +11,32 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import com.example.project.blabla_porter.service.OsrmRoutingService;
+import java.util.Map;
+import java.util.HashMap;
+
 @RestController
 @RequestMapping("/api/trips")
 public class TripController {
 
     @Autowired
     private TripService tripService;
+
+    @Autowired
+    private OsrmRoutingService osrmRoutingService;
+
+    @GetMapping("/osrm-stats")
+    public Map<String, Integer> getOsrmStats() {
+        return osrmRoutingService.getStats();
+    }
+
+    @PostMapping("/osrm-stats/reset")
+    public Map<String, String> resetOsrmStats() {
+        osrmRoutingService.resetStats();
+        Map<String, String> response = new HashMap<>();
+        response.put("status", "success");
+        return response;
+    }
 
     @PostMapping
     @RequireRole(User.UserRole.TRAVELER)

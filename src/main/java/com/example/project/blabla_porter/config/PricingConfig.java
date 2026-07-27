@@ -33,14 +33,14 @@ public class PricingConfig {
     }
 
     public double calculateDistanceFare(double distanceKm) {
-        if (distanceKm <= 0) return 0.0;
+        if (distanceKm <= 3.0) return 0.0;
         double fare = 0.0;
-        if (distanceKm <= 100) {
-            fare = distanceKm * 1.5;
-        } else if (distanceKm <= 500) {
-            fare = (100 * 1.5) + (distanceKm - 100) * 0.5;
+        if (distanceKm <= 100.0) {
+            fare = (distanceKm - 3.0) * 1.5;
+        } else if (distanceKm <= 500.0) {
+            fare = (97.0 * 1.5) + (distanceKm - 100.0) * 0.5;
         } else {
-            fare = (100 * 1.5) + (400 * 0.5) + (distanceKm - 500) * 0.15;
+            fare = (97.0 * 1.5) + (400.0 * 0.5) + (distanceKm - 500.0) * 0.15;
         }
         return fare;
     }

@@ -1606,30 +1606,37 @@ function calculateHaversineDistanceJs(lat1, lon1, lat2, lon2) {
 async function updateFareQuote(declaredVal) {
     const val = parseFloat(declaredVal) || 0.0;
     
-    // Calculate distance dynamically from inputs if available
-    let distance = 350.0;
+    // Pass coordinates dynamically if available to allow backend OSRM distance calculation
     const pickupLatEl = document.getElementById('book-pickup-lat');
     const pickupLngEl = document.getElementById('book-pickup-lng');
     const dropoffLatEl = document.getElementById('book-dropoff-lat');
     const dropoffLngEl = document.getElementById('book-dropoff-lng');
     
+    let queryParams = `declaredValue=${val}`;
+    const weightVal = parseFloat(document.getElementById('book-weight')?.value || '4.0');
+    queryParams += `&weightKg=${weightVal}`;
+
+    let hasCoords = false;
     if (pickupLatEl && pickupLngEl && dropoffLatEl && dropoffLngEl) {
         const lat1 = parseFloat(pickupLatEl.value);
         const lon1 = parseFloat(pickupLngEl.value);
         const lat2 = parseFloat(dropoffLatEl.value);
         const lon2 = parseFloat(dropoffLngEl.value);
         if (!isNaN(lat1) && !isNaN(lon1) && !isNaN(lat2) && !isNaN(lon2)) {
-            distance = calculateHaversineDistanceJs(lat1, lon1, lat2, lon2);
+            queryParams += `&pickupLat=${lat1}&pickupLng=${lon1}&dropoffLat=${lat2}&dropoffLng=${lon2}`;
+            hasCoords = true;
         }
     }
     
-    const displayDist = Math.round(distance * 10) / 10;
-    const weightVal = parseFloat(document.getElementById('book-weight')?.value || '4.0');
+    if (!hasCoords) {
+        queryParams += `&distanceKm=350.0`;
+    }
 
     try {
-        const res = await fetch(`${API_BASE}/parcels/quote?declaredValue=${val}&distanceKm=${distance}&weightKg=${weightVal}`, { headers: getAuthHeaders() });
+        const res = await fetch(`${API_BASE}/parcels/quote?${queryParams}`, { headers: getAuthHeaders() });
         if (res.ok) {
             currentParcelQuote = await res.json();
+            const displayDist = Math.round(currentParcelQuote.estimatedDistanceKm * 10) / 10;
             // Re-render modal details to display updated quote
             const box = document.getElementById('fare-breakdown-box');
             if (box) {
@@ -2699,6 +2706,37 @@ window.openTrackingModal = function(parcelId, tripId) {
     renderApp();
 };
 
+async function updateRoutePolyline(polyline, lat1, lng1, lat2, lng2) {
+    try {
+        const res = await fetch(`http://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.routes && data.routes.length > 0) {
+                const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                polyline.setLatLngs(coords);
+                return;
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load OSRM routing, falling back to straight line", e);
+    }
+    polyline.setLatLngs([[lat1, lng1], [lat2, lng2]]);
+}
+
+window.triggerRouteMapUpdate = function(polyline, pickupMarker, dropoffMarker) {
+    if (!pickupMarker || !dropoffMarker) return;
+    const p = pickupMarker.getLatLng();
+    const d = dropoffMarker.getLatLng();
+    updateRoutePolyline(polyline, p.lat, p.lng, d.lat, d.lng);
+};
+
+window.triggerLocalTaxiRouteMapUpdate = function(polyline, pickupMarker, dropoffMarker) {
+    if (!pickupMarker || !dropoffMarker) return;
+    const p = pickupMarker.getLatLng();
+    const d = dropoffMarker.getLatLng();
+    updateRoutePolyline(polyline, p.lat, p.lng, d.lat, d.lng);
+};
+
 window.initBookingMap = function() {
     const mapDiv = document.getElementById('booking-map');
     if (!mapDiv) return;
@@ -2747,6 +2785,7 @@ window.initBookingMap = function() {
         dropoffMarker.bindPopup("<b>Dropoff Location (Drag to fine-tune)</b>");
 
         const polyline = L.polyline([[lat1, lng1], [lat2, lng2]], { color: 'blue', dashArray: '5, 5' }).addTo(bookingMapInstance);
+        updateRoutePolyline(polyline, lat1, lng1, lat2, lng2);
 
         const group = new L.featureGroup([pickupMarker, dropoffMarker]);
         bookingMapInstance.fitBounds(group.getBounds().pad(0.1));
@@ -2755,7 +2794,7 @@ window.initBookingMap = function() {
             const position = pickupMarker.getLatLng();
             document.getElementById('book-pickup-lat').value = position.lat;
             document.getElementById('book-pickup-lng').value = position.lng;
-            polyline.setLatLngs([position, dropoffMarker.getLatLng()]);
+            triggerRouteMapUpdate(polyline, pickupMarker, dropoffMarker);
             reverseGeocode(position.lat, position.lng, 'book-pickup');
             updateFareQuote(document.getElementById('book-value').value);
         });
@@ -2764,7 +2803,7 @@ window.initBookingMap = function() {
             const position = dropoffMarker.getLatLng();
             document.getElementById('book-dropoff-lat').value = position.lat;
             document.getElementById('book-dropoff-lng').value = position.lng;
-            polyline.setLatLngs([pickupMarker.getLatLng(), position]);
+            triggerRouteMapUpdate(polyline, pickupMarker, dropoffMarker);
             reverseGeocode(position.lat, position.lng, 'book-dropoff');
             updateFareQuote(document.getElementById('book-value').value);
         });
@@ -2803,11 +2842,7 @@ function setupBlurGeocoding(inputId, latId, lngId, marker, polyline, type) {
                         document.getElementById(lngId).value = lon;
                         
                         marker.setLatLng([lat, lon]);
-                        if (type === 0) {
-                            polyline.setLatLngs([[lat, lon], dropoffMarker.getLatLng()]);
-                        } else {
-                            polyline.setLatLngs([pickupMarker.getLatLng(), [lat, lon]]);
-                        }
+                        triggerRouteMapUpdate(polyline, pickupMarker, dropoffMarker);
                         
                         const group = new L.featureGroup([pickupMarker, dropoffMarker]);
                         bookingMapInstance.fitBounds(group.getBounds().pad(0.1));
@@ -2864,11 +2899,7 @@ function setupAutocomplete(inputId, suggestionsId, latId, lngId, marker, polylin
                         document.getElementById(lngId).value = lon;
                         
                         marker.setLatLng([lat, lon]);
-                        if (type === 0) {
-                            polyline.setLatLngs([[lat, lon], dropoffMarker.getLatLng()]);
-                        } else {
-                            polyline.setLatLngs([pickupMarker.getLatLng(), [lat, lon]]);
-                        }
+                        triggerRouteMapUpdate(polyline, pickupMarker, dropoffMarker);
                         
                         const group = new L.featureGroup([pickupMarker, dropoffMarker]);
                         bookingMapInstance.fitBounds(group.getBounds().pad(0.1));
@@ -3045,6 +3076,21 @@ function updateLiveTrackingUI(tracking, parcel) {
 
         trackingMarkers.routeLine = L.polyline([[pLat, pLng], [cLat, cLng], [dLat, dLng]], { color: 'teal', weight: 4, dashArray: '8 4' }).addTo(trackingMapInstance);
 
+        // Fetch true road route asynchronously and update polyline coordinates
+        fetch(`${API_BASE}/tracking/route/${parcel.tripId || tracking.tripId}`, { headers: getAuthHeaders() })
+            .then(res => {
+                if (res.ok) return res.json();
+            })
+            .then(data => {
+                if (data && data.polylineWaypoints) {
+                    const coords = data.polylineWaypoints.map(w => [w.latitude, w.longitude]);
+                    if (trackingMarkers.routeLine) {
+                        trackingMarkers.routeLine.setLatLngs(coords);
+                    }
+                }
+            })
+            .catch(err => console.error("Error loading snapped road route details", err));
+
         const group = new L.featureGroup([trackingMarkers.pMarker, trackingMarkers.dMarker, trackingMarkers.cMarker]);
         trackingMapInstance.fitBounds(group.getBounds().pad(0.1));
         setTimeout(() => {
@@ -3052,9 +3098,6 @@ function updateLiveTrackingUI(tracking, parcel) {
         }, 250);
     } else {
         if (trackingMarkers.cMarker) smoothMoveMarker(trackingMarkers.cMarker, [cLat, cLng], 2000);
-        setTimeout(() => {
-            if (trackingMarkers.routeLine) trackingMarkers.routeLine.setLatLngs([[pLat, pLng], [cLat, cLng], [dLat, dLng]]);
-        }, 2100);
     }
 
     updateSignalLostBanner('parcel-signal-lost-area', lastTrackingPingTimestamp);
@@ -3897,6 +3940,21 @@ function updateRideTrackingUI(tracking, ride) {
 
         rideTrackingMarkers.routeLine = L.polyline([[pLat, pLng], [cLat, cLng], [dLat, dLng]], { color: 'indigo', weight: 4, dashArray: '8 4' }).addTo(trackingMapInstance);
 
+        // Fetch true road route asynchronously and update polyline coordinates
+        fetch(`${API_BASE}/tracking/route/${ride.tripId || tracking.tripId}`, { headers: getAuthHeaders() })
+            .then(res => {
+                if (res.ok) return res.json();
+            })
+            .then(data => {
+                if (data && data.polylineWaypoints) {
+                    const coords = data.polylineWaypoints.map(w => [w.latitude, w.longitude]);
+                    if (rideTrackingMarkers.routeLine) {
+                        rideTrackingMarkers.routeLine.setLatLngs(coords);
+                    }
+                }
+            })
+            .catch(err => console.error("Error loading snapped road route details for ride", err));
+
         const group = new L.featureGroup([rideTrackingMarkers.pMarker, rideTrackingMarkers.dMarker, rideTrackingMarkers.cMarker]);
         trackingMapInstance.fitBounds(group.getBounds().pad(0.1));
         setTimeout(() => {
@@ -3904,9 +3962,6 @@ function updateRideTrackingUI(tracking, ride) {
         }, 250);
     } else {
         if (rideTrackingMarkers.cMarker) smoothMoveMarker(rideTrackingMarkers.cMarker, [cLat, cLng], 2000);
-        setTimeout(() => {
-            if (rideTrackingMarkers.routeLine) rideTrackingMarkers.routeLine.setLatLngs([[pLat, pLng], [cLat, cLng], [dLat, dLng]]);
-        }, 2100);
     }
 
     updateSignalLostBanner('ride-signal-lost-area', lastTrackingPingTimestamp);
@@ -4066,6 +4121,7 @@ window.initLocalTaxiBookingMap = function() {
         localTaxiDropoffMarker.bindPopup("<b>Dropoff Point (Drag to refine)</b>");
 
         localTaxiPolyline = L.polyline([[lat1, lng1], [lat2, lng2]], { color: 'cyan', dashArray: '5, 5' }).addTo(localTaxiBookingMapInstance);
+        updateRoutePolyline(localTaxiPolyline, lat1, lng1, lat2, lng2);
 
         const group = new L.featureGroup([localTaxiPickupMarker, localTaxiDropoffMarker]);
         localTaxiBookingMapInstance.fitBounds(group.getBounds().pad(0.2));
@@ -4074,7 +4130,7 @@ window.initLocalTaxiBookingMap = function() {
             const pos = localTaxiPickupMarker.getLatLng();
             document.getElementById('local-taxi-pickup-lat').value = pos.lat;
             document.getElementById('local-taxi-pickup-lng').value = pos.lng;
-            localTaxiPolyline.setLatLngs([pos, localTaxiDropoffMarker.getLatLng()]);
+            triggerLocalTaxiRouteMapUpdate(localTaxiPolyline, localTaxiPickupMarker, localTaxiDropoffMarker);
             reverseGeocode(pos.lat, pos.lng, 'local-taxi-pickup');
             updateLocalTaxiFareQuote();
         });
@@ -4083,7 +4139,7 @@ window.initLocalTaxiBookingMap = function() {
             const pos = localTaxiDropoffMarker.getLatLng();
             document.getElementById('local-taxi-dropoff-lat').value = pos.lat;
             document.getElementById('local-taxi-dropoff-lng').value = pos.lng;
-            localTaxiPolyline.setLatLngs([localTaxiPickupMarker.getLatLng(), pos]);
+            triggerLocalTaxiRouteMapUpdate(localTaxiPolyline, localTaxiPickupMarker, localTaxiDropoffMarker);
             reverseGeocode(pos.lat, pos.lng, 'local-taxi-dropoff');
             updateLocalTaxiFareQuote();
         });
@@ -4124,11 +4180,7 @@ function setupLocalBlurGeocoding(inputId, latId, lngId, marker, type) {
                         document.getElementById(lngId).value = lon;
 
                         marker.setLatLng([lat, lon]);
-                        if (type === 0) {
-                            localTaxiPolyline.setLatLngs([[lat, lon], localTaxiDropoffMarker.getLatLng()]);
-                        } else {
-                            localTaxiPolyline.setLatLngs([localTaxiPickupMarker.getLatLng(), [lat, lon]]);
-                        }
+                        triggerLocalTaxiRouteMapUpdate(localTaxiPolyline, localTaxiPickupMarker, localTaxiDropoffMarker);
 
                         const group = new L.featureGroup([localTaxiPickupMarker, localTaxiDropoffMarker]);
                         localTaxiBookingMapInstance.fitBounds(group.getBounds().pad(0.2));
@@ -4597,11 +4649,7 @@ function setupLocalTaxiAutocomplete(inputId, suggestionsId, latId, lngId, marker
                         document.getElementById(lngId).value = lon;
                         
                         marker.setLatLng([lat, lon]);
-                        if (type === 0) {
-                            polyline.setLatLngs([[lat, lon], localTaxiDropoffMarker.getLatLng()]);
-                        } else {
-                            polyline.setLatLngs([localTaxiPickupMarker.getLatLng(), [lat, lon]]);
-                        }
+                        triggerLocalTaxiRouteMapUpdate(polyline, localTaxiPickupMarker, localTaxiDropoffMarker);
                         
                         const group = new L.featureGroup([localTaxiPickupMarker, localTaxiDropoffMarker]);
                         localTaxiBookingMapInstance.fitBounds(group.getBounds().pad(0.2));

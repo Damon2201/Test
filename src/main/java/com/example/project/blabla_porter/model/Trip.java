@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@org.hibernate.annotations.Check(constraints = "available_capacity_kg >= 0 AND available_seats >= 0")
 public class Trip {
 
     public enum TripStatus {
@@ -44,7 +45,10 @@ public class Trip {
 
     private LocalDateTime estimatedArrivalTime;
 
+    @jakarta.validation.constraints.PositiveOrZero(message = "Available capacity cannot be negative")
     private Double availableCapacityKg;
+
+    @jakarta.validation.constraints.PositiveOrZero(message = "Available seats cannot be negative")
     private Integer availableSeats;
 
     @Enumerated(EnumType.STRING)

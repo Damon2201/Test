@@ -11,4 +11,5 @@ public interface RideRequestRepository extends JpaRepository<RideRequest, Long> 
     List<RideRequest> findByRiderId(Long riderId);
     List<RideRequest> findByTripId(Long tripId);
     List<RideRequest> findByStatus(RideRequest.RideStatus status);
+    java.util.Optional<RideRequest> findByRazorpayOrderId(String razorpayOrderId);
 }

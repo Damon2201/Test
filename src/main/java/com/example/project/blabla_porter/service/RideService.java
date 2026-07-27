@@ -42,21 +42,27 @@ public class RideService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private OsrmRoutingService osrmRoutingService;
+
     @org.springframework.beans.factory.annotation.Value("${razorpay.key.id:}")
     private String razorpayKeyId;
 
     @org.springframework.beans.factory.annotation.Value("${razorpay.key.secret:}")
     private String razorpayKeySecret;
 
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
     private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
 
     public double calculateRideFare(double distanceKm) {
-        if (distanceKm <= 0) return 50.0;
+        if (distanceKm <= 3.0) return 50.0;
         double fare = 50.0;
-        if (distanceKm <= 100) {
-            fare += distanceKm * 1.50;
+        if (distanceKm <= 100.0) {
+            fare += (distanceKm - 3.0) * 1.50;
         } else {
-            fare += (100 * 1.50) + (distanceKm - 100) * 1.00;
+            fare += (97.0 * 1.50) + (distanceKm - 100.0) * 1.00;
         }
         return fare;
     }
@@ -92,7 +98,7 @@ public class RideService {
         Double distance = 0.0;
         if (req.getPickupLatitude() != null && req.getPickupLongitude() != null &&
             req.getDropoffLatitude() != null && req.getDropoffLongitude() != null) {
-            distance = calculateHaversineDistance(
+            distance = osrmRoutingService.getRouteDistance(
                 req.getPickupLatitude(), req.getPickupLongitude(),
                 req.getDropoffLatitude(), req.getDropoffLongitude()
             );
@@ -280,6 +286,9 @@ public class RideService {
                 throw new RuntimeException("Failed to create Razorpay Order: " + e.getMessage(), e);
             }
         }
+        
+        ride.setRazorpayOrderId(orderId);
+        rideRequestRepository.save(ride);
 
         return com.example.project.blabla_porter.dto.RazorpayOrderResponse.builder()
                 .keyId(keyIdToUse)
@@ -304,14 +313,16 @@ public class RideService {
 
         Trip trip = tripRepository.findByIdForUpdate(ride.getTripId())
                 .orElseThrow(() -> new RuntimeException("Trip not found"));
+        entityManager.refresh(trip); // Bypass L1 cache to load the committed database state
 
         if (trip.getAvailableSeats() == null || trip.getAvailableSeats() <= 0) {
             throw new IllegalStateException("No available seats left on this trip!");
         }
 
-        boolean isMock = req.getRazorpayOrderId() != null && req.getRazorpayOrderId().startsWith("order_mock_");
+        boolean isProduction = razorpayKeyId != null && !razorpayKeyId.isBlank() && razorpayKeySecret != null && !razorpayKeySecret.isBlank();
+        boolean isMock = !isProduction && req.getRazorpayOrderId() != null && req.getRazorpayOrderId().startsWith("order_mock_");
 
-        if (!isMock && razorpayKeyId != null && !razorpayKeyId.isBlank() && razorpayKeySecret != null && !razorpayKeySecret.isBlank()) {
+        if (isProduction) {
             // Verify payment signature
             try {
                 org.json.JSONObject options = new org.json.JSONObject();
@@ -390,6 +401,7 @@ public class RideService {
 
             // Increment available seats back on the trip
             tripRepository.findByIdForUpdate(ride.getTripId()).ifPresent(trip -> {
+                entityManager.refresh(trip); // Bypass L1 cache to load the committed database state
                 if (trip.getAvailableSeats() != null) {
                     trip.setAvailableSeats(trip.getAvailableSeats() + 1);
                     tripRepository.save(trip);
