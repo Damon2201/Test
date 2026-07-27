@@ -181,4 +181,20 @@ public class AuthController {
         response.put("message", "Password changed successfully and sessions revoked!");
         return response;
     }
+
+    @PostMapping("/forgot-password-reset")
+    public java.util.Map<String, String> forgotPasswordReset(@Valid @RequestBody com.example.project.blabla_porter.dto.ForgotPasswordResetRequest request) {
+        String mobile = request.getMobileNumber().trim();
+        String expectedOtp = registrationOtpCache.get(mobile);
+        if (expectedOtp == null || request.getOtp() == null || !request.getOtp().trim().equals(expectedOtp)) {
+            throw new IllegalArgumentException("Invalid password reset verification OTP!");
+        }
+        registrationOtpCache.remove(mobile);
+        userService.resetPasswordByMobile(mobile, request.getNewPassword());
+
+        java.util.Map<String, String> response = new java.util.HashMap<>();
+        response.put("status", "success");
+        response.put("message", "Password reset successfully!");
+        return response;
+    }
 }

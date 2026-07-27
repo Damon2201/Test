@@ -48,6 +48,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/kyc/**",
                         "/api/governance/**",
                         "/api/tracking/**",
+                        "/api/notifications/**",
                         "/api/auth/change-password",
                         "/api/auth/logout/all",
                         "/api/auth/logout"

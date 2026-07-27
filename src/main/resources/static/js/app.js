@@ -1587,7 +1587,10 @@ function renderActiveModal() {
                                 <input type="text" id="signin-mobile" class="form-control" style="padding-left:16px;" placeholder="Enter your mobile number" required />
                             </div>
                             <div class="form-group" style="margin-bottom:20px;">
-                                <label class="form-label">Password</label>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <label class="form-label" style="margin-bottom:0;">Password</label>
+                                    <a href="#" style="color:var(--porter-teal); font-size:12px; font-weight:700; text-decoration:none;" onclick="triggerForgotPassword(event)">Forgot Password?</a>
+                                </div>
                                 <input type="password" id="signin-password" class="form-control" style="padding-left:16px;" placeholder="Enter your password" required />
                             </div>
                             <button type="submit" class="btn-search" style="width:100%;">Sign In with BCrypt + JWT</button>
@@ -1653,6 +1656,40 @@ function renderActiveModal() {
                             <button type="submit" id="btn-submit-register" class="btn-search" style="width:100%; display:none;">Verify OTP & Create Account</button>
                         </form>
                     `}
+                </div>
+            </div>
+        `;
+    }
+
+    if (activeModal === 'forgotpassword') {
+        return `
+            <div class="modal-backdrop show">
+                <div class="modal-box">
+                    <div class="modal-head">
+                        <h3>🔑 Recover Password</h3>
+                        <button class="btn-close" onclick="closeModal()">✕</button>
+                    </div>
+                    <form id="auth-forgot-form" onsubmit="handleForgotPasswordSubmit(event)">
+                        <p style="font-size:13px; color:var(--text-body); margin-bottom:16px; line-height:1.5;">
+                            Enter your registered 10-digit mobile number below. We will send a simulated SMS password recovery code to verify your request.
+                        </p>
+                        <div class="form-group" style="margin-bottom:16px;">
+                            <label class="form-label">Registered Mobile Number</label>
+                            <input type="text" id="forgot-mobile" class="form-control" style="padding-left:16px;" placeholder="e.g. 9999911111" required />
+                        </div>
+                        <div id="forgot-otp-container" style="display:none; border:1px solid var(--porter-teal); padding:14px; border-radius:12px; margin-bottom:16px; background:rgba(6,182,212,0.05);">
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label" style="color:var(--porter-teal); font-weight:700;">Enter 6-Digit Recovery OTP</label>
+                                <input type="text" id="forgot-otp" class="form-control" style="padding-left:16px; text-align:center; font-size:18px; letter-spacing:4px;" placeholder="000000" maxlength="6" />
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Enter New Password</label>
+                                <input type="password" id="forgot-new-password" class="form-control" style="padding-left:16px;" placeholder="Create a new password" />
+                            </div>
+                        </div>
+                        <button type="button" id="btn-send-forgot-otp" class="btn-search" style="width:100%;" onclick="sendForgotPasswordOtpBtn()">Send Recovery OTP via SMS</button>
+                        <button type="submit" id="btn-submit-forgot" class="btn-search" style="width:100%; display:none; background:var(--porter-teal);">Reset Password</button>
+                    </form>
                 </div>
             </div>
         `;
@@ -3183,6 +3220,75 @@ window.sendRegistrationOtpBtn = async function() {
         }
     } catch (err) {
         showToast('Network error while sending OTP', 'error');
+    }
+};
+
+window.triggerForgotPassword = function(e) {
+    e.preventDefault();
+    closeModal();
+    activeModal = 'forgotpassword';
+    renderApp();
+};
+
+window.sendForgotPasswordOtpBtn = async function() {
+    const mobile = document.getElementById('forgot-mobile').value.trim();
+    if (!mobile) {
+        showToast('Please enter your mobile number first!', 'error');
+        return;
+    }
+    if (mobile.length !== 10 || isNaN(mobile)) {
+        showToast('Mobile number must be exactly 10 digits!', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/auth/send-registration-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mobileNumber: mobile })
+        });
+        if (res.ok) {
+            showToast('Recovery verification code sent successfully via SMS!', 'success');
+            document.getElementById('forgot-otp-container').style.display = 'block';
+            document.getElementById('btn-submit-forgot').style.display = 'block';
+            document.getElementById('btn-send-forgot-otp').style.display = 'none';
+        } else {
+            const err = await res.json();
+            showToast(`Failed to send OTP: ${err.message || 'Error'}`, 'error');
+        }
+    } catch (err) {
+        showToast('Network error while sending OTP', 'error');
+    }
+};
+
+window.handleForgotPasswordSubmit = async function(e) {
+    e.preventDefault();
+    const mobile = document.getElementById('forgot-mobile').value.trim();
+    const otp = document.getElementById('forgot-otp').value.trim();
+    const newPassword = document.getElementById('forgot-new-password').value.trim();
+
+    if (!otp || !newPassword) {
+        showToast('Please fill out verification code and new password!', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/auth/forgot-password-reset`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mobileNumber: mobile, otp: otp, newPassword: newPassword })
+        });
+
+        if (res.ok) {
+            showToast('Password reset successfully! You can now sign in with your new password.', 'success');
+            activeModal = 'signin';
+            renderApp();
+        } else {
+            const err = await res.json();
+            showToast(`Failed to reset password: ${err.message || 'Error'}`, 'error');
+        }
+    } catch (err) {
+        showToast('Network error while resetting password', 'error');
     }
 };
 

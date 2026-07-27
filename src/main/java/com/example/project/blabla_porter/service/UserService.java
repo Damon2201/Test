@@ -299,4 +299,16 @@ public class UserService {
         // Invalidate all existing sessions (refresh tokens) on password change
         refreshTokenService.deleteByUserId(userId);
     }
+
+    @Transactional
+    public void resetPasswordByMobile(String mobileNumber, String newPassword) {
+        User user = userRepository.findByMobileNumber(mobileNumber)
+                .orElseThrow(() -> new IllegalArgumentException("No account found with mobile number: " + mobileNumber));
+        validatePasswordPolicy(newPassword, user.getRole());
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        // Revoke all existing sessions
+        refreshTokenService.deleteByUserId(user.getId());
+    }
 }
