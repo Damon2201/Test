@@ -415,9 +415,21 @@ public class ParcelService {
         return saved;
     }
 
-    public Payment getPaymentByParcelRequestId(Long parcelRequestId) {
-        return paymentRepository.findByParcelRequestId(parcelRequestId)
-                .orElse(null);
+    public Payment getPaymentByParcelRequestId(Long parcelRequestId, Long authenticatedUserId) {
+        ParcelRequest request = getById(parcelRequestId);
+        if (request == null) {
+            throw new IllegalArgumentException("Parcel request not found");
+        }
+        if (request.getSenderId().equals(authenticatedUserId)) {
+            return paymentRepository.findByParcelRequestId(parcelRequestId).orElse(null);
+        }
+        if (request.getTripId() != null) {
+            Trip trip = tripRepository.findById(request.getTripId()).orElse(null);
+            if (trip != null && trip.getTravelerId().equals(authenticatedUserId)) {
+                return paymentRepository.findByParcelRequestId(parcelRequestId).orElse(null);
+            }
+        }
+        throw new org.springframework.security.access.AccessDeniedException("Access Denied: Only the parcel sender or trip captain can view escrow payment details!");
     }
 
     @Transactional

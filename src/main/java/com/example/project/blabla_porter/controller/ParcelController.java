@@ -92,8 +92,9 @@ public class ParcelController {
     }
 
     @GetMapping("/{id}/payment")
-    public Payment getPaymentByParcelRequestId(@PathVariable Long id) {
-        return parcelService.getPaymentByParcelRequestId(id);
+    public Payment getPaymentByParcelRequestId(@PathVariable Long id, jakarta.servlet.http.HttpServletRequest request) {
+        Long authenticatedUserId = (Long) request.getAttribute("authenticatedUserId");
+        return parcelService.getPaymentByParcelRequestId(id, authenticatedUserId);
     }
 
     @GetMapping("/sender/{senderId}")
