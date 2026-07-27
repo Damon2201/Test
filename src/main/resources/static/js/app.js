@@ -1137,7 +1137,6 @@ function renderActiveModal() {
                                 <select id="reg-role" class="form-control" style="padding-left:16px;" onchange="toggleKycFields(this.value)" required>
                                     <option value="SENDER">📦 Parcel Sender (Standard Customer)</option>
                                     <option value="TRAVELER">🚗 Captain / Traveler (Driver - Mandatory KYC)</option>
-                                    <option value="RIDER">🚖 Passenger Rider (Carpool Seats)</option>
                                 </select>
                             </div>
 
