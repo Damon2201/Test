@@ -119,11 +119,27 @@ public class BlaBlaPorterPhase4Tests {
         r1.setReviewText("Good trip!");
         trustAndDisputeService.submitRating(r1);
 
+        // Create second parcel for the second rating to avoid duplicate checking constraint
+        ParcelBookingRequest pReq2 = new ParcelBookingRequest();
+        pReq2.setSenderId(sender.getId());
+        pReq2.setTripId(trip.getId());
+        pReq2.setGoodsDescription("Second Goods");
+        pReq2.setDeclaredValue(2000.0);
+        pReq2.setPickupLocation("Chennai Central");
+        pReq2.setDropoffLocation("Silk Board, Bengaluru");
+        ParcelRequest parcel2 = parcelService.createParcelRequest(pReq2);
+        parcelService.acceptParcelRequest(parcel2.getId(), traveler.getId());
+        parcelService.payEscrow(parcel2.getId(), sender.getId());
+        
+        com.example.project.blabla_porter.model.ParcelRequest dbParcel2 = parcelRequestRepository.findById(parcel2.getId()).orElseThrow();
+        dbParcel2.setStatus(com.example.project.blabla_porter.model.ParcelRequest.ParcelStatus.DELIVERED);
+        parcel2 = parcelRequestRepository.save(dbParcel2);
+
         // Second rating: 2 stars
         RatingSubmitRequest r2 = new RatingSubmitRequest();
         r2.setRaterUserId(sender.getId());
         r2.setRateeUserId(traveler.getId());
-        r2.setParcelRequestId(parcel.getId());
+        r2.setParcelRequestId(parcel2.getId());
         r2.setScore(2);
         r2.setReviewText("Slight delay");
         trustAndDisputeService.submitRating(r2);

@@ -4,6 +4,9 @@ import com.example.project.blabla_porter.service.JwtService;
 import com.example.project.blabla_porter.service.TrackingService;
 import com.example.project.blabla_porter.service.ParcelService;
 import com.example.project.blabla_porter.model.ParcelRequest;
+import com.example.project.blabla_porter.repository.TripRepository;
+import com.example.project.blabla_porter.repository.RideRequestRepository;
+import com.example.project.blabla_porter.repository.ParcelRequestRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -30,6 +33,15 @@ public class WebSocketChannelInterceptor implements ChannelInterceptor {
     @Autowired
     @org.springframework.context.annotation.Lazy
     private ParcelService parcelService;
+
+    @Autowired
+    private TripRepository tripRepository;
+
+    @Autowired
+    private RideRequestRepository rideRequestRepository;
+
+    @Autowired
+    private ParcelRequestRepository parcelRequestRepository;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -111,18 +123,52 @@ public class WebSocketChannelInterceptor implements ChannelInterceptor {
                 
                 Long tripId = parcel.getTripId();
                 if (tripId == null) {
-                    // Chat is only allowed if parcel is matched/requested on a trip
                     throw new IllegalArgumentException("Parcel request is not associated with any trip");
                 }
+
+                com.example.project.blabla_porter.model.Trip trip = tripRepository.findById(tripId)
+                        .orElseThrow(() -> new IllegalArgumentException("Trip not found with ID: " + tripId));
                 
-                trackingService.assertUserHasAccessToTrip(userId, tripId);
+                if (!userId.equals(parcel.getSenderId()) && !userId.equals(trip.getTravelerId())) {
+                    throw new IllegalArgumentException("Access denied: You are not authorized to subscribe to this chat");
+                }
                 log.info("User {} successfully subscribed to chat for parcel {} on trip {}", userId, parcelRequestId, tripId);
 
             } else if (destination.startsWith("/topic/trip/")) {
                 // Topic format: /topic/trip/{tripId}
                 String tripIdStr = destination.substring("/topic/trip/".length());
                 Long tripId = Long.parseLong(tripIdStr);
-                trackingService.assertUserHasAccessToTrip(userId, tripId);
+
+                com.example.project.blabla_porter.model.Trip trip = tripRepository.findById(tripId)
+                        .orElseThrow(() -> new IllegalArgumentException("Trip not found with ID: " + tripId));
+
+                boolean hasAccess = false;
+                if (trip.getTravelerId().equals(userId)) {
+                    hasAccess = true;
+                } else {
+                    // Check if user is a rider with an active ride request on the trip (ACCEPTED or IN_PROGRESS)
+                    boolean isRider = rideRequestRepository.findByTripId(tripId).stream()
+                            .anyMatch(r -> r.getRiderId().equals(userId) &&
+                                    (r.getStatus() == com.example.project.blabla_porter.model.RideRequest.RideStatus.ACCEPTED ||
+                                     r.getStatus() == com.example.project.blabla_porter.model.RideRequest.RideStatus.IN_PROGRESS));
+                    if (isRider) {
+                        hasAccess = true;
+                    } else {
+                        // Check if user is a sender with a parcel request on the trip (including ACCEPTED, PICKED_UP, or IN_TRANSIT)
+                        boolean isSender = parcelRequestRepository.findByTripId(tripId).stream()
+                                .anyMatch(p -> p.getSenderId().equals(userId) &&
+                                        (p.getStatus() == com.example.project.blabla_porter.model.ParcelRequest.ParcelStatus.ACCEPTED ||
+                                         p.getStatus() == com.example.project.blabla_porter.model.ParcelRequest.ParcelStatus.PICKED_UP ||
+                                         p.getStatus() == com.example.project.blabla_porter.model.ParcelRequest.ParcelStatus.IN_TRANSIT));
+                        if (isSender) {
+                            hasAccess = true;
+                        }
+                    }
+                }
+
+                if (!hasAccess) {
+                    throw new IllegalArgumentException("Access denied: You are not authorized to subscribe to updates for trip " + tripId);
+                }
                 log.info("User {} successfully subscribed to updates for trip {}", userId, tripId);
             }
         } catch (IllegalArgumentException e) {
