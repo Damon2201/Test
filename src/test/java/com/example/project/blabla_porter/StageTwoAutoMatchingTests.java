@@ -153,13 +153,14 @@ public class StageTwoAutoMatchingTests {
         User traveler2 = User.builder().fullName("Traveler 2").mobileNumber("9999977777").role(User.UserRole.TRAVELER).kycStatus(User.KycStatus.APPROVED).build();
         userRepository.save(traveler2);
 
+        LocalDateTime now = LocalDateTime.now();
         // Register trip 1
         TripCreateRequest tripReq1 = new TripCreateRequest();
         tripReq1.setTravelerId(traveler1.getId());
         tripReq1.setSource("Bengaluru");
         tripReq1.setDestination("Hyderabad");
-        tripReq1.setDepartureTime(LocalDateTime.now().plusDays(2));
-        tripReq1.setEstimatedArrivalTime(LocalDateTime.now().plusDays(3));
+        tripReq1.setDepartureTime(now.plusDays(2).withHour(8).withMinute(0));
+        tripReq1.setEstimatedArrivalTime(now.plusDays(2).withHour(16).withMinute(0));
         tripReq1.setAvailableCapacityKg(10.0);
         tripReq1.setAvailableSeats(3);
         Trip trip1 = tripService.createTrip(tripReq1);
@@ -169,8 +170,8 @@ public class StageTwoAutoMatchingTests {
         tripReq2.setTravelerId(traveler2.getId());
         tripReq2.setSource("Bengaluru");
         tripReq2.setDestination("Hyderabad");
-        tripReq2.setDepartureTime(LocalDateTime.now().plusDays(3)); // departs later
-        tripReq2.setEstimatedArrivalTime(LocalDateTime.now().plusDays(4));
+        tripReq2.setDepartureTime(now.plusDays(2).withHour(10).withMinute(0)); // departs later on same day
+        tripReq2.setEstimatedArrivalTime(now.plusDays(2).withHour(18).withMinute(0));
         tripReq2.setAvailableCapacityKg(10.0);
         tripReq2.setAvailableSeats(3);
         Trip trip2 = tripService.createTrip(tripReq2);

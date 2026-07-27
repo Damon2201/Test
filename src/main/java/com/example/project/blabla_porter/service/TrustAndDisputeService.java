@@ -45,6 +45,17 @@ public class TrustAndDisputeService {
         userRepository.findById(req.getRateeUserId())
                 .orElseThrow(() -> new RuntimeException("Ratee user not found with id: " + req.getRateeUserId()));
 
+        if (req.getParcelRequestId() != null) {
+            if (ratingRepository.findByRaterUserIdAndParcelRequestId(req.getRaterUserId(), req.getParcelRequestId()).isPresent()) {
+                throw new IllegalStateException("You have already submitted a rating for this parcel request!");
+            }
+        }
+        if (req.getRideRequestId() != null) {
+            if (ratingRepository.findByRaterUserIdAndRideRequestId(req.getRaterUserId(), req.getRideRequestId()).isPresent()) {
+                throw new IllegalStateException("You have already submitted a rating for this ride request!");
+            }
+        }
+
         // Verification of completed transaction and counterparty validation
         if (req.getParcelRequestId() != null) {
             ParcelRequest parcel = parcelRequestRepository.findById(req.getParcelRequestId())

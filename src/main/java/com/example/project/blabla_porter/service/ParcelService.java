@@ -154,8 +154,7 @@ public class ParcelService {
             List<Trip> activeTrips = tripRepository.findByStatus(Trip.TripStatus.PLANNED);
             Trip matched = null;
             for (Trip t : activeTrips) {
-                if (matchesLocation(t.getSource(), req.getPickupLocation()) &&
-                    matchesLocation(t.getDestination(), req.getDropoffLocation())) {
+                if (isRouteMatch(t, req.getPickupLatitude(), req.getPickupLongitude(), req.getDropoffLatitude(), req.getDropoffLongitude(), req.getPickupLocation(), req.getDropoffLocation())) {
                     if (t.getAvailableCapacityKg() >= reqWeight) {
                         if (t.getDepartureTime().isAfter(java.time.LocalDateTime.now())) {
                             if (matched == null || t.getDepartureTime().isBefore(matched.getDepartureTime())) {
@@ -239,6 +238,85 @@ public class ParcelService {
         String tl = tripLoc.toLowerCase().trim();
         String rl = reqLoc.toLowerCase().trim();
         return tl.contains(rl) || rl.contains(tl);
+    }
+
+    private static final java.util.Map<String, double[]> CITY_COORDINATES = new java.util.HashMap<>();
+    static {
+        CITY_COORDINATES.put("bengaluru", new double[]{12.9716, 77.5946});
+        CITY_COORDINATES.put("bangalore", new double[]{12.9716, 77.5946});
+        CITY_COORDINATES.put("chennai", new double[]{13.0827, 80.2707});
+        CITY_COORDINATES.put("delhi", new double[]{28.6139, 77.2090});
+        CITY_COORDINATES.put("mumbai", new double[]{19.0760, 72.8777});
+        CITY_COORDINATES.put("hyderabad", new double[]{17.3850, 78.4867});
+        CITY_COORDINATES.put("pune", new double[]{18.5204, 73.8567});
+    }
+
+    private double[] resolveCityCoordinates(String cityName) {
+        if (cityName == null) return new double[]{12.9716, 77.5946};
+        String key = cityName.trim().toLowerCase();
+        for (java.util.Map.Entry<String, double[]> entry : CITY_COORDINATES.entrySet()) {
+            if (key.contains(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return new double[]{12.9716, 77.5946}; // Default Bengaluru
+    }
+
+    private boolean isRouteMatch(Trip trip, Double pickupLat, Double pickupLng, Double dropoffLat, Double dropoffLng, String pickupLoc, String dropoffLoc) {
+        boolean baseLocationMatch = matchesLocation(trip.getSource(), pickupLoc) && matchesLocation(trip.getDestination(), dropoffLoc);
+        if (!baseLocationMatch) {
+            return false;
+        }
+
+        if (pickupLat == null || pickupLng == null || dropoffLat == null || dropoffLng == null) {
+            return true;
+        }
+
+        try {
+            double[] srcCoords = resolveCityCoordinates(trip.getSource());
+            double[] destCoords = resolveCityCoordinates(trip.getDestination());
+
+            OsrmRoutingService.RouteDetails details = osrmRoutingService.getRouteDetails(srcCoords[0], srcCoords[1], destCoords[0], destCoords[1]);
+            if (details == null || details.getWaypoints() == null || details.getWaypoints().isEmpty()) {
+                return true;
+            }
+
+            int pickupIdx = -1;
+            double minPickupDist = Double.MAX_VALUE;
+            for (int i = 0; i < details.getWaypoints().size(); i++) {
+                com.example.project.blabla_porter.dto.TrackingDto.GpsPoint pt = details.getWaypoints().get(i);
+                double dist = calculateHaversineDistance(pickupLat, pickupLng, pt.getLatitude(), pt.getLongitude());
+                if (dist < minPickupDist) {
+                    minPickupDist = dist;
+                    pickupIdx = i;
+                }
+            }
+
+            int dropoffIdx = -1;
+            double minDropoffDist = Double.MAX_VALUE;
+            for (int i = 0; i < details.getWaypoints().size(); i++) {
+                com.example.project.blabla_porter.dto.TrackingDto.GpsPoint pt = details.getWaypoints().get(i);
+                double dist = calculateHaversineDistance(dropoffLat, dropoffLng, pt.getLatitude(), pt.getLongitude());
+                if (dist < minDropoffDist) {
+                    minDropoffDist = dist;
+                    dropoffIdx = i;
+                }
+            }
+
+            return minPickupDist <= 15.0 && minDropoffDist <= 15.0 && pickupIdx <= dropoffIdx;
+
+        } catch (Exception e) {
+            System.err.println("OSRM route matching failed, falling back to city-name matching: " + e.getMessage());
+            return true;
+        }
+    }
+
+    private int getTimeSlot(java.time.LocalDateTime dateTime) {
+        int hour = dateTime.getHour();
+        if (hour >= 0 && hour < 6) return 1;      // Night
+        if (hour >= 6 && hour < 12) return 2;     // Morning
+        if (hour >= 12 && hour < 18) return 3;    // Afternoon
+        return 4;                                 // Evening
     }
 
     public ParcelRequest acceptParcelRequest(Long parcelRequestId, Long travelerId) {
@@ -465,7 +543,7 @@ public class ParcelService {
             return request;
         }
 
-        // Traveler is rejecting/cancelling: auto-route only if isAutoMatch was true
+        // Traveler is rejecting/cancelling: auto-route
         Long previousTripId = request.getTripId();
 
         // Release capacity on the old trip
@@ -476,59 +554,53 @@ public class ParcelService {
             });
         }
 
-        if (Boolean.TRUE.equals(request.getIsAutoMatch())) {
-            List<Trip> activeTrips = tripRepository.findByStatus(Trip.TripStatus.PLANNED);
-            Trip nextMatched = null;
-            for (Trip t : activeTrips) {
-                if (previousTripId != null) {
-                    if (t.getId().equals(previousTripId)) {
-                        continue; // skip the rejecting trip
+        List<Trip> activeTrips = tripRepository.findByStatus(Trip.TripStatus.PLANNED);
+        Trip nextMatched = null;
+        for (Trip t : activeTrips) {
+            if (previousTripId != null) {
+                if (t.getId().equals(previousTripId)) {
+                    continue; // skip the rejecting trip
+                }
+                
+                Trip prevTrip = tripRepository.findById(previousTripId).orElse(null);
+                if (prevTrip != null) {
+                    // Check departure calendar date (same day)
+                    if (!t.getDepartureTime().toLocalDate().equals(prevTrip.getDepartureTime().toLocalDate())) {
+                        continue;
                     }
-                    // Order to prevent cyclic assignment: only route to trips departing after,
-                    // or if at the same time, with a strictly higher trip ID
-                    Trip prevTrip = tripRepository.findById(previousTripId).orElse(null);
-                    if (prevTrip != null) {
-                        if (t.getDepartureTime().isBefore(prevTrip.getDepartureTime())) {
-                            continue;
-                        }
-                        if (t.getDepartureTime().isEqual(prevTrip.getDepartureTime()) && t.getId() <= prevTrip.getId()) {
-                            continue;
-                        }
+                    // Check time slot
+                    if (getTimeSlot(t.getDepartureTime()) != getTimeSlot(prevTrip.getDepartureTime())) {
+                        continue;
+                    }
+                    // Order to prevent cyclic assignment
+                    if (t.getDepartureTime().isBefore(prevTrip.getDepartureTime())) {
+                        continue;
+                    }
+                    if (t.getDepartureTime().isEqual(prevTrip.getDepartureTime()) && t.getId() <= prevTrip.getId()) {
+                        continue;
                     }
                 }
-                if (matchesLocation(t.getSource(), request.getPickupLocation()) &&
-                    matchesLocation(t.getDestination(), request.getDropoffLocation())) {
-                    if (t.getAvailableCapacityKg() >= reqWeight) {
-                        if (t.getDepartureTime().isAfter(java.time.LocalDateTime.now())) {
-                            if (nextMatched == null || t.getDepartureTime().isBefore(nextMatched.getDepartureTime())) {
-                                nextMatched = t;
-                            }
+            }
+            if (isRouteMatch(t, request.getPickupLatitude(), request.getPickupLongitude(), request.getDropoffLatitude(), request.getDropoffLongitude(), request.getPickupLocation(), request.getDropoffLocation())) {
+                if (t.getAvailableCapacityKg() >= reqWeight) {
+                    if (t.getDepartureTime().isAfter(java.time.LocalDateTime.now())) {
+                        if (nextMatched == null || t.getDepartureTime().isBefore(nextMatched.getDepartureTime())) {
+                            nextMatched = t;
                         }
                     }
                 }
             }
+        }
 
-            if (nextMatched != null) {
-                Trip lockedNextTrip = tripRepository.findByIdForUpdate(nextMatched.getId()).orElse(null);
-                if (lockedNextTrip != null && lockedNextTrip.getAvailableCapacityKg() >= reqWeight) {
-                    request.setTripId(lockedNextTrip.getId());
-                    request.setStatus(ParcelRequest.ParcelStatus.CREATED);
-                    parcelRequestRepository.save(request);
+        if (nextMatched != null) {
+            Trip lockedNextTrip = tripRepository.findByIdForUpdate(nextMatched.getId()).orElse(null);
+            if (lockedNextTrip != null && lockedNextTrip.getAvailableCapacityKg() >= reqWeight) {
+                request.setTripId(lockedNextTrip.getId());
+                request.setStatus(ParcelRequest.ParcelStatus.CREATED);
+                parcelRequestRepository.save(request);
 
-                    lockedNextTrip.setAvailableCapacityKg(Math.max(0.0, lockedNextTrip.getAvailableCapacityKg() - reqWeight));
-                    tripRepository.save(lockedNextTrip);
-                } else {
-                    request.setTripId(null);
-                    request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);
-                    parcelRequestRepository.save(request);
-
-                    paymentRepository.findByParcelRequestId(parcelRequestId).ifPresent(payment -> {
-                        if (payment.getStatus() == Payment.EscrowStatus.HELD) {
-                            payment.setStatus(Payment.EscrowStatus.REFUNDED);
-                            paymentRepository.save(payment);
-                        }
-                    });
-                }
+                lockedNextTrip.setAvailableCapacityKg(Math.max(0.0, lockedNextTrip.getAvailableCapacityKg() - reqWeight));
+                tripRepository.save(lockedNextTrip);
             } else {
                 request.setTripId(null);
                 request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);
@@ -542,7 +614,6 @@ public class ParcelService {
                 });
             }
         } else {
-            // Direct request rejected — cancel and do not auto-route
             request.setTripId(null);
             request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);
             parcelRequestRepository.save(request);

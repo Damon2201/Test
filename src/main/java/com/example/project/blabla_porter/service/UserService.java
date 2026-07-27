@@ -150,17 +150,36 @@ public class UserService {
             user.setRole(User.UserRole.TRAVELER);
         }
 
-        if (req.getAadhaarNumber() == null || req.getAadhaarNumber().isBlank() ||
-            req.getPanNumber() == null || req.getPanNumber().isBlank() ||
-            req.getDrivingLicenceNumber() == null || req.getDrivingLicenceNumber().isBlank() ||
-            req.getRcNumber() == null || req.getRcNumber().isBlank()) {
-            throw new IllegalArgumentException("Aadhaar, PAN, Driving Licence, and RC numbers are mandatory for KYC submission!");
+        String mode = req.getTravelMode();
+        if (mode == null || mode.isBlank()) {
+            mode = "DRIVING";
+        }
+        user.setTravelMode(mode);
+
+        if ("PASSENGER".equalsIgnoreCase(mode)) {
+            if (req.getAadhaarNumber() == null || req.getAadhaarNumber().isBlank() ||
+                req.getTicketOrPnrNumber() == null || req.getTicketOrPnrNumber().isBlank()) {
+                throw new IllegalArgumentException("Aadhaar number and Travel ticket/PNR number are mandatory for Passenger KYC submission!");
+            }
+            user.setAadhaarNumber(req.getAadhaarNumber());
+            user.setTicketOrPnrNumber(req.getTicketOrPnrNumber());
+            user.setPanNumber(null);
+            user.setDrivingLicenceNumber(null);
+            user.setRcNumber(null);
+        } else {
+            if (req.getAadhaarNumber() == null || req.getAadhaarNumber().isBlank() ||
+                req.getPanNumber() == null || req.getPanNumber().isBlank() ||
+                req.getDrivingLicenceNumber() == null || req.getDrivingLicenceNumber().isBlank() ||
+                req.getRcNumber() == null || req.getRcNumber().isBlank()) {
+                throw new IllegalArgumentException("Aadhaar, PAN, Driving Licence, and RC numbers are mandatory for Driving KYC submission!");
+            }
+            user.setAadhaarNumber(req.getAadhaarNumber());
+            user.setPanNumber(req.getPanNumber());
+            user.setDrivingLicenceNumber(req.getDrivingLicenceNumber());
+            user.setRcNumber(req.getRcNumber());
+            user.setTicketOrPnrNumber(null);
         }
 
-        user.setAadhaarNumber(req.getAadhaarNumber());
-        user.setPanNumber(req.getPanNumber());
-        user.setDrivingLicenceNumber(req.getDrivingLicenceNumber());
-        user.setRcNumber(req.getRcNumber());
         user.setKycStatus(User.KycStatus.PENDING_APPROVAL);
 
         return userRepository.save(user);

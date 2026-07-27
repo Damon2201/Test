@@ -65,6 +65,9 @@ public class User {
     private String selfieUrl;
     private String bankAccountDetails;
 
+    private String travelMode;
+    private String ticketOrPnrNumber;
+
     private Double averageRating;
     private Integer totalRatingsCount;
 
@@ -84,6 +87,13 @@ public class User {
         if (totalRatingsCount == null) {
             totalRatingsCount = 0;
         }
+        if (travelMode == null) {
+            travelMode = "DRIVING";
+        }
+    }
+
+    public String getTravelMode() {
+        return travelMode == null ? "DRIVING" : travelMode;
     }
 
     public java.util.Set<UserRole> getCapabilities() {

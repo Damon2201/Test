@@ -13,4 +13,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByRole(User.UserRole role);
     List<User> findByKycStatus(User.KycStatus kycStatus);
     boolean existsByMobileNumber(String mobileNumber);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE User u SET u.travelMode = 'DRIVING' WHERE u.travelMode IS NULL")
+    void updateNullTravelModesToDriving();
 }

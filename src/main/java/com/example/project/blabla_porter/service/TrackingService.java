@@ -69,17 +69,21 @@ public class TrackingService {
             return;
         }
 
-        // Check 2: Is the user a rider with a RideRequest on this trip?
-        boolean isRider = rideRequestRepository.findByTripId(tripId).stream()
-                .anyMatch(r -> r.getRiderId().equals(authenticatedUserId));
-        if (isRider) {
+        // Check 2: Is the user a rider with a RideRequest on this trip in ACCEPTED or IN_PROGRESS status?
+        boolean isRiderWithActiveRide = rideRequestRepository.findByTripId(tripId).stream()
+                .anyMatch(r -> r.getRiderId().equals(authenticatedUserId) &&
+                        (r.getStatus() == com.example.project.blabla_porter.model.RideRequest.RideStatus.ACCEPTED ||
+                         r.getStatus() == com.example.project.blabla_porter.model.RideRequest.RideStatus.IN_PROGRESS));
+        if (isRiderWithActiveRide) {
             return;
         }
 
-        // Check 3: Is the user a sender with a ParcelRequest on this trip?
-        boolean isSender = parcelRequestRepository.findByTripId(tripId).stream()
-                .anyMatch(p -> p.getSenderId().equals(authenticatedUserId));
-        if (isSender) {
+        // Check 3: Is the user a sender with a ParcelRequest on this trip in PICKED_UP or IN_TRANSIT status?
+        boolean isSenderWithActiveParcel = parcelRequestRepository.findByTripId(tripId).stream()
+                .anyMatch(p -> p.getSenderId().equals(authenticatedUserId) &&
+                        (p.getStatus() == com.example.project.blabla_porter.model.ParcelRequest.ParcelStatus.PICKED_UP ||
+                         p.getStatus() == com.example.project.blabla_porter.model.ParcelRequest.ParcelStatus.IN_TRANSIT));
+        if (isSenderWithActiveParcel) {
             return;
         }
 

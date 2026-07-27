@@ -11,6 +11,32 @@ const API_BASE = (() => {
     return '/api';
 })();
 
+window.toggleKycTravelModeFields = function(mode, prefix) {
+    const drivingDiv = document.getElementById(`${prefix}-driving-fields`);
+    const passengerDiv = document.getElementById(`${prefix}-passenger-fields`);
+    
+    const panInput = document.getElementById(`${prefix}-pan`);
+    const dlInput = document.getElementById(`${prefix}-dl`);
+    const rcInput = document.getElementById(`${prefix}-rc`);
+    const pnrInput = document.getElementById(`${prefix}-pnr`);
+
+    if (mode === 'PASSENGER') {
+        if (drivingDiv) drivingDiv.style.display = 'none';
+        if (passengerDiv) passengerDiv.style.display = 'block';
+        if (panInput) panInput.removeAttribute('required');
+        if (dlInput) dlInput.removeAttribute('required');
+        if (rcInput) rcInput.removeAttribute('required');
+        if (pnrInput) pnrInput.setAttribute('required', 'required');
+    } else {
+        if (drivingDiv) drivingDiv.style.display = 'block';
+        if (passengerDiv) passengerDiv.style.display = 'none';
+        if (panInput) panInput.setAttribute('required', 'required');
+        if (dlInput) dlInput.setAttribute('required', 'required');
+        if (rcInput) rcInput.setAttribute('required', 'required');
+        if (pnrInput) pnrInput.removeAttribute('required');
+    }
+};
+
 // Global fetch interceptor to handle expired or invalid JWT tokens (401/403)
 const originalFetch = window.fetch;
 window.fetch = async function(...args) {
@@ -85,6 +111,9 @@ let selectedParcelForTracking = null;
 let selectedTripForSeatBooking = null;
 let currentSeatQuote = null;
 let selectedRideForTracking = null;
+let selectedParcelForRating = null;
+let selectedRideForRating = null;
+let modalRateeId = null;
 let riderActiveSubTab = 'carpool';
 let currentCustomerTab = ''; // 'parcel', 'carpool', 'taxi', 'profile'
 let currentLocalTaxiQuote = null;
@@ -537,7 +566,7 @@ function renderApp() {
                         <div class="user-avatar">${currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : 'U'}</div>
                         <div class="user-details">
                             <span class="user-name">${escapeHtml(currentUser.fullName)}</span>
-                            <span class="user-role-badge">${currentUser.role === 'TRAVELER' ? 'CAPTAIN' : currentUser.role} (Sign Out)</span>
+                            <span class="user-role-badge">${currentUser.role === 'TRAVELER' ? 'CAPTAIN' : currentUser.role} ⭐ ${currentUser.averageRating ? currentUser.averageRating.toFixed(1) : '5.0'} (Sign Out)</span>
                         </div>
                     </div>
                 ` : `
@@ -735,24 +764,39 @@ function renderKycRequiredScreen(kycStatus) {
                 <span class="verified-badge" style="background:rgba(245,158,11,0.15); color:var(--warning);">STATUS: ${kycStatus}</span>
             </div>
             <p style="font-size:13px; color:var(--text-body); margin-bottom:24px; line-height:1.5;">
-                ⚠️ Mandatory Driver Protocol: Captains must submit Aadhaar, PAN, Driving Licence, and Vehicle RC to obtain Admin approval before publishing trips.
+                ⚠️ Mandatory Driver Protocol: Captains must submit Aadhaar, and either a Travel PNR or DL/RC/PAN to obtain Admin approval before publishing trips.
             </p>
             <form id="captain-kyc-form">
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">Travel Mode</label>
+                    <select id="kyc-travel-mode" class="form-control" style="padding-left:16px;" onchange="toggleKycTravelModeFields(this.value, 'kyc')" required>
+                        <option value="DRIVING" selected>🚗 Driving my own vehicle</option>
+                        <option value="PASSENGER">✈️ Travelling as a passenger</option>
+                    </select>
+                </div>
                 <div class="form-group" style="margin-bottom:14px;">
                     <label class="form-label">Aadhaar Card (12 Digits)</label>
                     <input type="text" id="kyc-aadhaar" class="form-control" style="padding-left:16px;" value="1234-5678-9012" required />
                 </div>
-                <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label">PAN Card Number</label>
-                    <input type="text" id="kyc-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" required />
+                <div id="kyc-driving-fields" style="display:block;">
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label">PAN Card Number</label>
+                        <input type="text" id="kyc-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" required />
+                    </div>
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label">Driving Licence Number</label>
+                        <input type="text" id="kyc-dl" class="form-control" style="padding-left:16px;" value="DL-12345-KAR" required />
+                    </div>
+                    <div class="form-group" style="margin-bottom:24px;">
+                        <label class="form-label">Vehicle RC Number</label>
+                        <input type="text" id="kyc-rc" class="form-control" style="padding-left:16px;" value="KA-01-AB-1234" required />
+                    </div>
                 </div>
-                <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label">Driving Licence Number</label>
-                    <input type="text" id="kyc-dl" class="form-control" style="padding-left:16px;" value="DL-12345-KAR" required />
-                </div>
-                <div class="form-group" style="margin-bottom:24px;">
-                    <label class="form-label">Vehicle RC Number</label>
-                    <input type="text" id="kyc-rc" class="form-control" style="padding-left:16px;" value="KA-01-AB-1234" required />
+                <div id="kyc-passenger-fields" style="display:none;">
+                    <div class="form-group" style="margin-bottom:24px;">
+                        <label class="form-label">Travel Ticket / PNR Number</label>
+                        <input type="text" id="kyc-pnr" class="form-control" style="padding-left:16px;" placeholder="e.g. PNR-998877" />
+                    </div>
                 </div>
                 <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green);">Submit KYC Documents</button>
             </form>
@@ -1059,7 +1103,12 @@ async function fetchRidesForCaptain() {
                             <button class="btn-book" style="background:var(--porter-gradient);" onclick="completePassengerRide(${r.id})">Complete Ride</button>
                         `;
                     } else if (r.status === 'COMPLETED') {
-                        actionBtnHtml = `<span style="font-weight:700; color:var(--accent-green); font-size:13px;">✅ Completed</span>`;
+                        actionBtnHtml = `
+                            <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                                <span style="font-weight:700; color:var(--accent-green); font-size:13px; margin-bottom:4px;">✅ Completed</span>
+                                <button class="btn-book" style="background:var(--warning); color:black; font-weight:700;" onclick="openRatingModal(null, ${r.id}, ${r.riderId}, 'ride')">⭐ Rate Passenger</button>
+                            </div>
+                        `;
                     } else if (r.status === 'CANCELLED') {
                         actionBtnHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled</span>`;
                     }
@@ -1947,6 +1996,44 @@ function renderActiveModal() {
         `;
     }
 
+    if (activeModal === 'rate-trip') {
+        const isParcel = !!selectedParcelForRating;
+        const targetId = isParcel ? selectedParcelForRating.id : selectedRideForRating.id;
+        const rateeId = modalRateeId;
+        const rateeName = isParcel ? 
+            (currentUser.id === modalRateeId ? "Counterparty" : "Traveler / Captain") : 
+            (currentUser.id === modalRateeId ? "Counterparty" : "Traveler / Captain");
+
+        return `
+            ${wrapStart}
+                    <div class="bottom-sheet-header">
+                        <h3>⭐ Rate Your Experience</h3>
+                        <button class="btn-close" onclick="closeModal()">✕</button>
+                    </div>
+                    <form id="rate-trip-form" onsubmit="submitTripRating(event, ${targetId}, ${rateeId}, ${isParcel})">
+                        <div style="font-weight:700; color:var(--porter-teal); margin-bottom:14px; font-size:13px;">
+                            Please rate your trip counterparty:
+                        </div>
+                        <div class="form-group" style="margin-bottom:16px;">
+                            <label class="form-label">Score (1 to 5 Stars)</label>
+                            <select id="rate-score" class="form-control" style="padding-left:16px;" required>
+                                <option value="5" selected>⭐⭐⭐⭐⭐ (5 - Exceptional)</option>
+                                <option value="4">⭐⭐⭐⭐ (4 - Very Good)</option>
+                                <option value="3">⭐⭐⭐ (3 - Average)</option>
+                                <option value="2">⭐⭐ (2 - Poor)</option>
+                                <option value="1">⭐ (1 - Terrible)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:20px;">
+                            <label class="form-label">Optional Review Comment</label>
+                            <textarea id="rate-review" class="form-control" style="padding:10px 16px; height:80px; resize:none;" placeholder="Describe your experience..."></textarea>
+                        </div>
+                        <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient);">Submit Rating</button>
+                    </form>
+            ${wrapEnd}
+        `;
+    }
+
     if (activeModal === 'apply-kyc') {
         return `
             ${wrapStart}
@@ -1957,20 +2044,35 @@ function renderActiveModal() {
                     <form id="apply-kyc-form" onsubmit="submitApplyKycForm(event)">
                         <div style="font-weight:700; color:var(--porter-teal); margin-bottom:14px; font-size:13px;">Please upload your verification credentials:</div>
                         <div class="form-group" style="margin-bottom:12px;">
+                            <label class="form-label">Travel Mode</label>
+                            <select id="apply-travel-mode" class="form-control" style="padding-left:16px;" onchange="toggleKycTravelModeFields(this.value, 'apply')" required>
+                                <option value="DRIVING" selected>🚗 Driving my own vehicle</option>
+                                <option value="PASSENGER">✈️ Travelling as a passenger</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:12px;">
                             <label class="form-label">Aadhaar Card Number</label>
                             <input type="text" id="apply-aadhaar" class="form-control" style="padding-left:16px;" value="123456789012" placeholder="12-digit Aadhaar" required />
                         </div>
-                        <div class="form-group" style="margin-bottom:12px;">
-                            <label class="form-label">PAN Card Number</label>
-                            <input type="text" id="apply-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" placeholder="ABCDE1234F" required />
+                        <div id="apply-driving-fields" style="display:block;">
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label">PAN Card Number</label>
+                                <input type="text" id="apply-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" placeholder="ABCDE1234F" required />
+                            </div>
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label">Driving License Number</label>
+                                <input type="text" id="apply-dl" class="form-control" style="padding-left:16px;" value="DL-1420110068745" placeholder="Driving License Number" required />
+                            </div>
+                            <div class="form-group" style="margin-bottom:20px;">
+                                <label class="form-label">Vehicle Registration Certificate (RC)</label>
+                                <input type="text" id="apply-rc" class="form-control" style="padding-left:16px;" value="RC-9988-AA" placeholder="RC Number" required />
+                            </div>
                         </div>
-                        <div class="form-group" style="margin-bottom:12px;">
-                            <label class="form-label">Driving License Number</label>
-                            <input type="text" id="apply-dl" class="form-control" style="padding-left:16px;" value="DL-1420110068745" placeholder="Driving License Number" required />
-                        </div>
-                        <div class="form-group" style="margin-bottom:20px;">
-                            <label class="form-label">Vehicle Registration Certificate (RC)</label>
-                            <input type="text" id="apply-rc" class="form-control" style="padding-left:16px;" value="RC-9988-AA" placeholder="RC Number" required />
+                        <div id="apply-passenger-fields" style="display:none;">
+                            <div class="form-group" style="margin-bottom:20px;">
+                                <label class="form-label">Travel Ticket / PNR Number</label>
+                                <input type="text" id="apply-pnr" class="form-control" style="padding-left:16px;" placeholder="e.g. PNR-998877" />
+                            </div>
                         </div>
                         <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient);">Submit KYC Application</button>
                     </form>
@@ -2322,12 +2424,15 @@ function bindPostRenderListeners() {
     if (kycForm) {
         kycForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const mode = document.getElementById('kyc-travel-mode').value;
             const payload = {
                 userId: currentUser.id,
                 aadhaarNumber: document.getElementById('kyc-aadhaar').value,
-                panNumber: document.getElementById('kyc-pan').value,
-                drivingLicenceNumber: document.getElementById('kyc-dl').value,
-                rcNumber: document.getElementById('kyc-rc').value
+                panNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-pan').value,
+                drivingLicenceNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-dl').value,
+                rcNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-rc').value,
+                travelMode: mode,
+                ticketOrPnrNumber: mode === 'PASSENGER' ? document.getElementById('kyc-pnr').value : null
             };
 
             try {
@@ -2641,7 +2746,12 @@ async function fetchParcelsForSender() {
                     </div>
                 `;
             } else if (p.status === 'DELIVERED') {
-                actionBtnHtml = `<span style="font-weight:700; color:var(--accent-green); font-size:13px;">✅ Cargo Delivered & Funds Released</span>`;
+                actionBtnHtml = `
+                    <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                        <span style="font-weight:700; color:var(--accent-green); font-size:13px; margin-bottom:4px;">✅ Cargo Delivered</span>
+                        <button class="btn-book" style="background:var(--warning); color:black; font-weight:700;" onclick="openRatingModal(${p.id}, null, null, 'parcel')">⭐ Rate Captain</button>
+                    </div>
+                `;
             } else if (p.status === 'CANCELLED') {
                 actionBtnHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled</span>`;
             }
@@ -2735,7 +2845,12 @@ async function fetchParcelsForCaptain() {
                             <button class="btn-book" style="background:var(--porter-gradient);" onclick="openTrackingModal(${p.id}, ${p.tripId})">🗺️ Track</button>
                         `;
                     } else if (p.status === 'DELIVERED') {
-                        actionBtnHtml = `<span style="font-weight:700; color:var(--accent-green); font-size:13px;">✅ Fulfilling Completed</span>`;
+                        actionBtnHtml = `
+                            <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                                <span style="font-weight:700; color:var(--accent-green); font-size:13px; margin-bottom:4px;">✅ Fulfilling Completed</span>
+                                <button class="btn-book" style="background:var(--warning); color:black; font-weight:700;" onclick="openRatingModal(${p.id}, null, ${p.senderId}, 'parcel')">⭐ Rate Sender</button>
+                            </div>
+                        `;
                     } else if (p.status === 'CANCELLED') {
                         actionBtnHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled</span>`;
                     }
@@ -3848,7 +3963,12 @@ async function fetchRidesForRider() {
                     <button class="btn-book" style="background:var(--porter-gradient); margin-right:8px;" onclick="openRideTrackingModal(${ride.id})">🛡️ Emergency Console</button>
                 `;
             } else if (ride.status === 'COMPLETED') {
-                actionHtml = `<span style="font-weight:700; color:var(--accent-green); font-size:13px;">✅ Completed</span>`;
+                actionHtml = `
+                    <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                        <span style="font-weight:700; color:var(--accent-green); font-size:13px; margin-bottom:4px;">✅ Completed</span>
+                        <button class="btn-book" style="background:var(--warning); color:black; font-weight:700;" onclick="openRatingModal(null, ${ride.id}, null, 'ride')">⭐ Rate Captain</button>
+                    </div>
+                `;
             } else if (ride.status === 'CANCELLED') {
                 actionHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled & Refunded</span>`;
             }
@@ -5446,6 +5566,7 @@ function renderCustomerProfile() {
                         <div>
                             <h2 style="font-size:22px; font-weight:800; color:var(--text-white); margin-bottom:4px;">${escapeHtml(currentUser.fullName)}</h2>
                             <span class="user-role-badge" style="background:rgba(99,102,241,0.2); color:var(--primary); font-size:12px; font-weight:700; padding:4px 8px; border-radius:6px; border: 1px solid rgba(99,102,241,0.3);">${capsDisplay}</span>
+                            <div style="font-size:12px; color:var(--warning); margin-top:6px; font-weight:700;">⭐ ${currentUser.averageRating ? currentUser.averageRating.toFixed(1) : '5.0'} (${currentUser.totalRatingsCount || 0} reviews)</div>
                         </div>
                     </div>
                 </div>
@@ -5534,10 +5655,12 @@ window.initCustomerMap = function() {
 
 window.submitApplyKycForm = async function(event) {
     event.preventDefault();
+    const mode = document.getElementById('apply-travel-mode').value;
     const aadhaar = document.getElementById('apply-aadhaar').value;
-    const pan = document.getElementById('apply-pan').value;
-    const dl = document.getElementById('apply-dl').value;
-    const rc = document.getElementById('apply-rc').value;
+    const pan = mode === 'PASSENGER' ? null : document.getElementById('apply-pan').value;
+    const dl = mode === 'PASSENGER' ? null : document.getElementById('apply-dl').value;
+    const rc = mode === 'PASSENGER' ? null : document.getElementById('apply-rc').value;
+    const pnr = mode === 'PASSENGER' ? document.getElementById('apply-pnr').value : null;
     
     try {
         const res = await fetch(`${API_BASE}/kyc/submit`, {
@@ -5548,13 +5671,17 @@ window.submitApplyKycForm = async function(event) {
                 aadhaarNumber: aadhaar,
                 panNumber: pan,
                 drivingLicenceNumber: dl,
-                rcNumber: rc
+                rcNumber: rc,
+                travelMode: mode,
+                ticketOrPnrNumber: pnr
             })
         });
         if (res.ok) {
             const data = await res.json();
             currentUser.kycStatus = 'PENDING_APPROVAL';
             currentUser.role = 'TRAVELER';
+            currentUser.travelMode = mode;
+            currentUser.ticketOrPnrNumber = pnr;
             if (currentUser.capabilities && !currentUser.capabilities.includes('TRAVELER')) {
                 // keep the SENDER/RIDER capabilities list as is but update kycStatus
             }
@@ -5569,6 +5696,109 @@ window.submitApplyKycForm = async function(event) {
     } catch (err) {
         console.error("KYC submission error", err);
         showToast("Network error submitting KYC.", "error");
+    }
+};
+
+window.openRatingModal = async function(parcelRequestId, rideRequestId, initialRateeId, type) {
+    let rateeId = initialRateeId;
+    if (rideRequestId && !rateeId) {
+        try {
+            const rideRes = await fetch(`${API_BASE}/rides/${rideRequestId}`, { headers: getAuthHeaders() });
+            if (rideRes.ok) {
+                const ride = await rideRes.json();
+                const tripRes = await fetch(`${API_BASE}/trips/${ride.tripId}`, { headers: getAuthHeaders() });
+                if (tripRes.ok) {
+                    const trip = await tripRes.json();
+                    rateeId = trip.travelerId;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch counterparty details:", e);
+        }
+    }
+    if (parcelRequestId && !rateeId) {
+        try {
+            const parcelRes = await fetch(`${API_BASE}/parcels/${parcelRequestId}`, { headers: getAuthHeaders() });
+            if (parcelRes.ok) {
+                const parcel = await parcelRes.json();
+                const tripRes = await fetch(`${API_BASE}/trips/${parcel.tripId}`, { headers: getAuthHeaders() });
+                if (tripRes.ok) {
+                    const trip = await tripRes.json();
+                    rateeId = trip.travelerId;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch counterparty details:", e);
+        }
+    }
+
+    if (!rateeId) {
+        showToast("Could not determine counterparty ID for rating.", "error");
+        return;
+    }
+
+    if (type === 'parcel') {
+        selectedParcelForRating = { id: parcelRequestId };
+        selectedRideForRating = null;
+    } else {
+        selectedParcelForRating = null;
+        selectedRideForRating = { id: rideRequestId };
+    }
+    
+    activeModal = 'rate-trip';
+    modalRateeId = rateeId;
+    
+    renderApp();
+};
+
+window.submitTripRating = async function(event, targetId, rateeId, isParcel) {
+    event.preventDefault();
+    const score = parseInt(document.getElementById('rate-score').value, 10);
+    const reviewText = document.getElementById('rate-review').value;
+
+    const payload = {
+        raterUserId: currentUser.id,
+        rateeUserId: rateeId,
+        parcelRequestId: isParcel ? targetId : null,
+        rideRequestId: isParcel ? null : targetId,
+        score: score,
+        reviewText: reviewText
+    };
+
+    try {
+        const res = await fetch(`${API_BASE}/governance/ratings`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            showToast("Thank you! Rating submitted successfully.", "success");
+            closeModal();
+            const userRes = await fetch(`${API_BASE}/auth/users/${currentUser.id}`, { headers: getAuthHeaders() });
+            if (userRes.ok) {
+                const updatedUser = await userRes.json();
+                currentUser.averageRating = updatedUser.averageRating;
+                currentUser.totalRatingsCount = updatedUser.totalRatingsCount;
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            }
+            renderApp();
+            if (isParcel) {
+                if (currentUser.role === 'TRAVELER') {
+                    fetchParcelsForCaptain();
+                } else {
+                    fetchParcelsForSender();
+                }
+            } else {
+                fetchRidesForRider();
+                fetchRidesForCaptain();
+            }
+        } else {
+            const data = await res.json().catch(() => ({}));
+            showToast(data.message || "Failed to submit rating. Duplicate rating?", "error");
+        }
+    } catch (err) {
+        console.error(err);
+        showToast("Error submitting rating.", "error");
     }
 };
 
