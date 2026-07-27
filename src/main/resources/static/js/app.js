@@ -1098,11 +1098,11 @@ function renderActiveModal() {
                         <form id="auth-signin-form">
                             <div class="form-group" style="margin-bottom:14px;">
                                 <label class="form-label">Registered 10-Digit Mobile Number</label>
-                                <input type="text" id="signin-mobile" class="form-control" style="padding-left:16px;" value="9876543213" required />
+                                <input type="text" id="signin-mobile" class="form-control" style="padding-left:16px;" placeholder="Enter your mobile number" required />
                             </div>
                             <div class="form-group" style="margin-bottom:20px;">
                                 <label class="form-label">Password</label>
-                                <input type="password" id="signin-password" class="form-control" style="padding-left:16px;" value="password123" required />
+                                <input type="password" id="signin-password" class="form-control" style="padding-left:16px;" placeholder="Enter your password" required />
                             </div>
                             <button type="submit" class="btn-search" style="width:100%;">Sign In with BCrypt + JWT</button>
                         </form>
@@ -1110,19 +1110,19 @@ function renderActiveModal() {
                         <form id="auth-register-form">
                             <div class="form-group" style="margin-bottom:14px;">
                                 <label class="form-label">Full Name</label>
-                                <input type="text" id="reg-name" class="form-control" style="padding-left:16px;" value="Stefan Salvatore" required />
+                                <input type="text" id="reg-name" class="form-control" style="padding-left:16px;" placeholder="Enter your full name" required />
                             </div>
                             <div class="form-group" style="margin-bottom:14px;">
                                 <label class="form-label">10-Digit Mobile Number</label>
-                                <input type="text" id="reg-mobile" class="form-control" style="padding-left:16px;" value="9888811111" required />
+                                <input type="text" id="reg-mobile" class="form-control" style="padding-left:16px;" placeholder="Enter 10-digit mobile number" required />
                             </div>
                             <div class="form-group" style="margin-bottom:14px;">
                                 <label class="form-label">Email Address</label>
-                                <input type="email" id="reg-email" class="form-control" style="padding-left:16px;" value="stefan@mystic.com" required />
+                                <input type="email" id="reg-email" class="form-control" style="padding-left:16px;" placeholder="Enter your email address" required />
                             </div>
                             <div class="form-group" style="margin-bottom:14px;">
                                 <label class="form-label">Password</label>
-                                <input type="password" id="reg-password" class="form-control" style="padding-left:16px;" value="password123" required />
+                                <input type="password" id="reg-password" class="form-control" style="padding-left:16px;" placeholder="Create a strong password" required />
                             </div>
                             <div class="form-group" style="margin-bottom:14px;">
                                 <label class="form-label">Account Role (ADMIN blocked server-side)</label>
@@ -1137,19 +1137,19 @@ function renderActiveModal() {
                                 <div style="font-weight:700; color:var(--porter-teal); margin-bottom:10px; font-size:13px;">🪪 Mandatory Captain KYC Documents</div>
                                 <div class="form-group" style="margin-bottom:10px;">
                                     <label class="form-label">Aadhaar Card Number</label>
-                                    <input type="text" id="reg-aadhaar" class="form-control" style="padding-left:16px;" value="123456789012" placeholder="12-digit Aadhaar" />
+                                    <input type="text" id="reg-aadhaar" class="form-control" style="padding-left:16px;" placeholder="12-digit Aadhaar" />
                                 </div>
                                 <div class="form-group" style="margin-bottom:10px;">
                                     <label class="form-label">PAN Card Number</label>
-                                    <input type="text" id="reg-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" placeholder="ABCDE1234F" />
+                                    <input type="text" id="reg-pan" class="form-control" style="padding-left:16px;" placeholder="e.g. ABCDE1234F" />
                                 </div>
                                 <div class="form-group" style="margin-bottom:10px;">
                                     <label class="form-label">Driving License Number</label>
-                                    <input type="text" id="reg-dl" class="form-control" style="padding-left:16px;" value="DL-1420110068745" placeholder="Driving License Number" />
+                                    <input type="text" id="reg-dl" class="form-control" style="padding-left:16px;" placeholder="e.g. DL-1420110068745" />
                                 </div>
                                 <div class="form-group" style="margin-bottom:0px;">
                                     <label class="form-label">Vehicle Registration Certificate (RC)</label>
-                                    <input type="text" id="reg-rc" class="form-control" style="padding-left:16px;" value="RC-9988-AA" placeholder="RC Number" />
+                                    <input type="text" id="reg-rc" class="form-control" style="padding-left:16px;" placeholder="e.g. RC-9988-AA" />
                                 </div>
                             </div>
 
