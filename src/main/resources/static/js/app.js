@@ -463,11 +463,19 @@ function loadUserSession() {
             const parsed = JSON.parse(saved);
             const claims = parseJwtClaims(parsed.token);
             if (claims && claims.role) {
+                // Check if JWT token has expired
+                if (claims.exp && (claims.exp * 1000) < Date.now()) {
+                    // Token is expired — clear session immediately so user sees sign-in page
+                    localStorage.removeItem('currentUser');
+                    currentUser = null;
+                    return;
+                }
                 parsed.role = claims.role; // Enforce role from JWT claim
                 parsed.id = parseInt(claims.sub);
             }
             currentUser = parsed;
         } catch (e) {
+            localStorage.removeItem('currentUser');
             currentUser = null;
         }
     }
