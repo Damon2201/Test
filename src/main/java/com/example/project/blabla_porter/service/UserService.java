@@ -49,11 +49,21 @@ public class UserService {
 
         // Auto-approve KYC for RIDER, SENDER, ADMIN; only TRAVELER requires manual KYC
         User.KycStatus initialKycStatus;
+        String mode = req.getTravelMode();
+        if (mode == null || mode.isBlank()) {
+            mode = "DRIVING";
+        }
         if (req.getRole() == User.UserRole.TRAVELER) {
-            boolean hasKycDocs = (req.getAadhaarNumber() != null && !req.getAadhaarNumber().isBlank()) ||
-                                 (req.getPanNumber() != null && !req.getPanNumber().isBlank()) ||
-                                 (req.getDrivingLicenceNumber() != null && !req.getDrivingLicenceNumber().isBlank()) ||
-                                 (req.getRcNumber() != null && !req.getRcNumber().isBlank());
+            boolean hasKycDocs;
+            if ("PASSENGER".equalsIgnoreCase(mode)) {
+                hasKycDocs = (req.getAadhaarNumber() != null && !req.getAadhaarNumber().isBlank()) &&
+                             (req.getTicketOrPnrNumber() != null && !req.getTicketOrPnrNumber().isBlank());
+            } else {
+                hasKycDocs = (req.getAadhaarNumber() != null && !req.getAadhaarNumber().isBlank()) &&
+                             (req.getPanNumber() != null && !req.getPanNumber().isBlank()) &&
+                             (req.getDrivingLicenceNumber() != null && !req.getDrivingLicenceNumber().isBlank()) &&
+                             (req.getRcNumber() != null && !req.getRcNumber().isBlank());
+            }
             initialKycStatus = hasKycDocs ? User.KycStatus.PENDING_APPROVAL : User.KycStatus.NOT_SUBMITTED;
         } else {
             initialKycStatus = User.KycStatus.APPROVED;
@@ -67,9 +77,11 @@ public class UserService {
                 .passwordHash(hashed)
                 .kycStatus(initialKycStatus)
                 .aadhaarNumber(req.getAadhaarNumber())
-                .panNumber(req.getPanNumber())
-                .drivingLicenceNumber(req.getDrivingLicenceNumber())
-                .rcNumber(req.getRcNumber())
+                .panNumber("PASSENGER".equalsIgnoreCase(mode) ? null : req.getPanNumber())
+                .drivingLicenceNumber("PASSENGER".equalsIgnoreCase(mode) ? null : req.getDrivingLicenceNumber())
+                .rcNumber("PASSENGER".equalsIgnoreCase(mode) ? null : req.getRcNumber())
+                .travelMode(mode)
+                .ticketOrPnrNumber("PASSENGER".equalsIgnoreCase(mode) ? req.getTicketOrPnrNumber() : null)
                 .build();
 
         return userRepository.save(user);
@@ -97,6 +109,8 @@ public class UserService {
                 .role(user.getRole())
                 .capabilities(user.getCapabilities())
                 .kycStatus(user.getKycStatus())
+                .travelMode(user.getTravelMode())
+                .ticketOrPnrNumber(user.getTicketOrPnrNumber())
                 .build();
     }
 
@@ -128,6 +142,8 @@ public class UserService {
                 .role(user.getRole())
                 .capabilities(user.getCapabilities())
                 .kycStatus(user.getKycStatus())
+                .travelMode(user.getTravelMode())
+                .ticketOrPnrNumber(user.getTicketOrPnrNumber())
                 .build();
     }
 

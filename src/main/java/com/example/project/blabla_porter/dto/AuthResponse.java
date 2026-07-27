@@ -20,4 +20,6 @@ public class AuthResponse {
     private User.UserRole role;
     private java.util.Set<User.UserRole> capabilities;
     private User.KycStatus kycStatus;
+    private String travelMode;
+    private String ticketOrPnrNumber;
 }

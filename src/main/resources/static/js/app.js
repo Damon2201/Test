@@ -1621,23 +1621,39 @@ function renderActiveModal() {
                                 </select>
                             </div>
 
+                            <div class="form-group" id="reg-travel-mode-container" style="display:none; margin-bottom:14px;">
+                                <label class="form-label">Travel Mode</label>
+                                <select id="reg-travel-mode" class="form-control" style="padding-left:16px;" onchange="toggleKycTravelModeFields(this.value, 'reg')" required>
+                                    <option value="DRIVING">🚗 Driving Mode (PAN, DL, RC required)</option>
+                                    <option value="PASSENGER">🎫 Passenger Mode (Ticket/PNR required)</option>
+                                </select>
+                            </div>
+
                             <div id="kyc-fields-container" style="display:none; border:1px dashed var(--border); padding:14px; border-radius:12px; margin-bottom:14px; background:var(--bg-surface);">
                                 <div style="font-weight:700; color:var(--porter-teal); margin-bottom:10px; font-size:13px;">🪪 Mandatory Captain KYC Documents</div>
                                 <div class="form-group" style="margin-bottom:10px;">
                                     <label class="form-label">Aadhaar Card Number</label>
                                     <input type="text" id="reg-aadhaar" class="form-control" style="padding-left:16px;" placeholder="12-digit Aadhaar" />
                                 </div>
-                                <div class="form-group" style="margin-bottom:10px;">
-                                    <label class="form-label">PAN Card Number</label>
-                                    <input type="text" id="reg-pan" class="form-control" style="padding-left:16px;" placeholder="e.g. ABCDE1234F" />
+                                <div id="reg-driving-fields">
+                                    <div class="form-group" style="margin-bottom:10px;">
+                                        <label class="form-label">PAN Card Number</label>
+                                        <input type="text" id="reg-pan" class="form-control" style="padding-left:16px;" placeholder="e.g. ABCDE1234F" />
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:10px;">
+                                        <label class="form-label">Driving License Number</label>
+                                        <input type="text" id="reg-dl" class="form-control" style="padding-left:16px;" placeholder="e.g. DL-1420110068745" />
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:0px;">
+                                        <label class="form-label">Vehicle Registration Certificate (RC)</label>
+                                        <input type="text" id="reg-rc" class="form-control" style="padding-left:16px;" placeholder="e.g. RC-9988-AA" />
+                                    </div>
                                 </div>
-                                <div class="form-group" style="margin-bottom:10px;">
-                                    <label class="form-label">Driving License Number</label>
-                                    <input type="text" id="reg-dl" class="form-control" style="padding-left:16px;" placeholder="e.g. DL-1420110068745" />
-                                </div>
-                                <div class="form-group" style="margin-bottom:0px;">
-                                    <label class="form-label">Vehicle Registration Certificate (RC)</label>
-                                    <input type="text" id="reg-rc" class="form-control" style="padding-left:16px;" placeholder="e.g. RC-9988-AA" />
+                                <div id="reg-passenger-fields" style="display:none;">
+                                    <div class="form-group" style="margin-bottom:0px;">
+                                        <label class="form-label">Travel Ticket / PNR Number</label>
+                                        <input type="text" id="reg-pnr" class="form-control" style="padding-left:16px;" placeholder="e.g. PNR-123456" />
+                                    </div>
                                 </div>
                             </div>
 
@@ -2424,10 +2440,20 @@ function bindPostRenderListeners() {
             };
 
             if (role === 'TRAVELER') {
+                const mode = document.getElementById('reg-travel-mode').value;
+                payload.travelMode = mode;
                 payload.aadhaarNumber = document.getElementById('reg-aadhaar').value;
-                payload.panNumber = document.getElementById('reg-pan').value;
-                payload.drivingLicenceNumber = document.getElementById('reg-dl').value;
-                payload.rcNumber = document.getElementById('reg-rc').value;
+                if (mode === 'PASSENGER') {
+                    payload.ticketOrPnrNumber = document.getElementById('reg-pnr').value;
+                    payload.panNumber = null;
+                    payload.drivingLicenceNumber = null;
+                    payload.rcNumber = null;
+                } else {
+                    payload.ticketOrPnrNumber = null;
+                    payload.panNumber = document.getElementById('reg-pan').value;
+                    payload.drivingLicenceNumber = document.getElementById('reg-dl').value;
+                    payload.rcNumber = document.getElementById('reg-rc').value;
+                }
             }
 
             try {
@@ -3159,19 +3185,22 @@ async function approveKycAdmin(userId) {
 // STAGE 1 Helper Functions
 window.toggleKycFields = function(role) {
     const container = document.getElementById('kyc-fields-container');
+    const travelModeContainer = document.getElementById('reg-travel-mode-container');
     if (container) {
         if (role === 'TRAVELER') {
             container.style.display = 'block';
-            document.getElementById('reg-aadhaar').required = true;
-            document.getElementById('reg-pan').required = true;
-            document.getElementById('reg-dl').required = true;
-            document.getElementById('reg-rc').required = true;
+            if (travelModeContainer) travelModeContainer.style.display = 'block';
+            const mode = document.getElementById('reg-travel-mode').value;
+            toggleKycTravelModeFields(mode, 'reg');
         } else {
             container.style.display = 'none';
+            if (travelModeContainer) travelModeContainer.style.display = 'none';
             document.getElementById('reg-aadhaar').required = false;
             document.getElementById('reg-pan').required = false;
             document.getElementById('reg-dl').required = false;
             document.getElementById('reg-rc').required = false;
+            const pnrInput = document.getElementById('reg-pnr');
+            if (pnrInput) pnrInput.required = false;
         }
     }
 };
@@ -3193,13 +3222,22 @@ window.sendRegistrationOtpBtn = async function() {
     }
 
     if (role === 'TRAVELER') {
+        const mode = document.getElementById('reg-travel-mode').value;
         const aadhaar = document.getElementById('reg-aadhaar').value.trim();
-        const pan = document.getElementById('reg-pan').value.trim();
-        const dl = document.getElementById('reg-dl').value.trim();
-        const rc = document.getElementById('reg-rc').value.trim();
-        if (!aadhaar || !pan || !dl || !rc) {
-            showToast('All KYC documents are required for Captain registration!', 'error');
-            return;
+        if (mode === 'PASSENGER') {
+            const pnr = document.getElementById('reg-pnr').value.trim();
+            if (!aadhaar || !pnr) {
+                showToast('Aadhaar number and Ticket/PNR are mandatory for Passenger Captain registration!', 'error');
+                return;
+            }
+        } else {
+            const pan = document.getElementById('reg-pan').value.trim();
+            const dl = document.getElementById('reg-dl').value.trim();
+            const rc = document.getElementById('reg-rc').value.trim();
+            if (!aadhaar || !pan || !dl || !rc) {
+                showToast('Aadhaar, PAN, DL, and RC are mandatory for Driver Captain registration!', 'error');
+                return;
+            }
         }
     }
 

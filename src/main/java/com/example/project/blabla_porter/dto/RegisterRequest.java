@@ -35,4 +35,7 @@ public class RegisterRequest {
     private String rcNumber;
 
     private String registrationOtp;
+
+    private String travelMode;
+    private String ticketOrPnrNumber;
 }
