@@ -429,7 +429,10 @@ public class ParcelService {
                 return paymentRepository.findByParcelRequestId(parcelRequestId).orElse(null);
             }
         }
-        throw new org.springframework.security.access.AccessDeniedException("Access Denied: Only the parcel sender or trip captain can view escrow payment details!");
+        throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN,
+                "Access Denied: Only the parcel sender or trip captain can view escrow payment details!"
+        );
     }
 
     @Transactional

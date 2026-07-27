@@ -55,6 +55,14 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
+    // To Handle response status exceptions
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> handleResponseStatusException(org.springframework.web.server.ResponseStatusException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("message", ex.getReason() != null ? ex.getReason() : ex.getMessage());
+        return new ResponseEntity<>(error, ex.getStatusCode());
+    }
+
     // To Handle rate limit exceeded errors
     @ExceptionHandler(com.example.project.blabla_porter.exception.RateLimitExceededException.class)
     public ResponseEntity<Map<String, String>> handleRateLimit(com.example.project.blabla_porter.exception.RateLimitExceededException ex) {
