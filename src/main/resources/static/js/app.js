@@ -3519,28 +3519,8 @@ window.initTelemetryMap = function() {
             lngInput.value = position.lng.toFixed(6);
         });
 
-        const devGpsBtn = document.getElementById('btn-device-gps');
-        if (devGpsBtn) {
-            devGpsBtn.addEventListener('click', function() {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(function(pos) {
-                        const lat = pos.coords.latitude;
-                        const lng = pos.coords.longitude;
-                        telemetryMarker.setLatLng([lat, lng]);
-                        telemetryMapInstance.setView([lat, lng], 14);
-                        latInput.value = lat.toFixed(6);
-                        lngInput.value = lng.toFixed(6);
-                        showToast('Fetched device GPS successfully!', 'success');
-                    }, function(err) {
-                        showToast('Device GPS permission denied or unavailable.', 'error');
-                    });
-                } else {
-                    showToast('Geolocation is not supported by your browser.', 'error');
-                }
-            });
-        }
-
         const gpsForm = document.getElementById('gps-broadcast-form');
+        let activeGpsBtn = null;
         if (gpsForm) {
             const newGpsForm = gpsForm.cloneNode(true);
             gpsForm.parentNode.replaceChild(newGpsForm, gpsForm);
@@ -3566,6 +3546,30 @@ window.initTelemetryMap = function() {
                 } catch (err) {
                     console.error(err);
                     showToast('Error broadcasting GPS telemetry', 'error');
+                }
+            });
+
+            activeGpsBtn = newGpsForm.querySelector('#btn-device-gps');
+        } else {
+            activeGpsBtn = document.getElementById('btn-device-gps');
+        }
+
+        if (activeGpsBtn) {
+            activeGpsBtn.addEventListener('click', function() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(function(pos) {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        telemetryMarker.setLatLng([lat, lng]);
+                        telemetryMapInstance.setView([lat, lng], 14);
+                        latInput.value = lat.toFixed(6);
+                        lngInput.value = lng.toFixed(6);
+                        showToast('Fetched device GPS successfully!', 'success');
+                    }, function(err) {
+                        showToast('Device GPS permission denied or unavailable.', 'error');
+                    });
+                } else {
+                    showToast('Geolocation is not supported by your browser.', 'error');
                 }
             });
         }
