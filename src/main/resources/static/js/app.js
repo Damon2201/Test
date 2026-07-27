@@ -1165,6 +1165,10 @@ function renderActiveModal() {
                                     <label class="form-label" style="color:var(--porter-teal); font-weight:700;">🔑 Enter 6-Digit SMS Verification OTP</label>
                                     <input type="text" id="reg-otp" class="form-control" style="padding-left:16px; text-align:center; font-size:18px; letter-spacing:4px;" placeholder="000000" maxlength="6" />
                                 </div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                                    <span style="font-size:11px; color:var(--text-body);">Didn't receive the SMS code?</span>
+                                    <button type="button" style="color:var(--porter-teal); background:none; border:none; padding:0; font-size:11px; font-weight:700; cursor:pointer; text-decoration:underline;" onclick="sendRegistrationOtpBtn()">Resend OTP</button>
+                                </div>
                             </div>
 
                             <button type="button" id="btn-send-otp" class="btn-search" style="width:100%; margin-bottom:10px;" onclick="sendRegistrationOtpBtn()">Send Verification OTP via SMS</button>
