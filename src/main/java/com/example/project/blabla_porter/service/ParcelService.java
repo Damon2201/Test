@@ -415,6 +415,11 @@ public class ParcelService {
         return saved;
     }
 
+    public Payment getPaymentByParcelRequestId(Long parcelRequestId) {
+        return paymentRepository.findByParcelRequestId(parcelRequestId)
+                .orElse(null);
+    }
+
     @Transactional
     public ParcelRequest cancelAndRefund(Long parcelRequestId, Long userId) {
         ParcelRequest request = getById(parcelRequestId);

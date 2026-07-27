@@ -91,6 +91,11 @@ public class ParcelController {
         return parcelService.getById(id);
     }
 
+    @GetMapping("/{id}/payment")
+    public Payment getPaymentByParcelRequestId(@PathVariable Long id) {
+        return parcelService.getPaymentByParcelRequestId(id);
+    }
+
     @GetMapping("/sender/{senderId}")
     // No @RequireRole — read-only, filtering happens by senderId
     public List<ParcelRequest> getRequestsBySender(@PathVariable Long senderId) {
