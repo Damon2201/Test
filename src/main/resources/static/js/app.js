@@ -11,6 +11,28 @@ const API_BASE = (() => {
     return '/api';
 })();
 
+// Global fetch interceptor to handle expired or invalid JWT tokens (401/403)
+const originalFetch = window.fetch;
+window.fetch = async function(...args) {
+    try {
+        const response = await originalFetch(...args);
+        if (response.status === 401 || response.status === 403) {
+            // Check if we are currently logged in. If so, automatically sign out on unauthorized error.
+            if (localStorage.getItem('currentUser')) {
+                localStorage.removeItem('currentUser');
+                currentUser = null;
+                showToast('Session expired. Please sign in again.', 'error');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            }
+        }
+        return response;
+    } catch (error) {
+        throw error;
+    }
+};
+
 // In-App Toast Notification Engine
 function showToast(message, type = 'info') {
     let container = document.getElementById('toast-container');
