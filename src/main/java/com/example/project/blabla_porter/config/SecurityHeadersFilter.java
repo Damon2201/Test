@@ -38,7 +38,7 @@ public class SecurityHeadersFilter implements Filter {
                 "font-src https://fonts.gstatic.com; " +
                 "img-src 'self' data: https://*.openstreetmap.org https://unpkg.com; " +
                 "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com; " +
-                "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org https://api.razorpay.com https://checkout.razorpay.com;");
+                "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.razorpay.com https://checkout.razorpay.com;");
 
         chain.doFilter(request, response);
     }
