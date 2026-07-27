@@ -532,7 +532,7 @@ function renderApp() {
                         <div class="user-avatar">${currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : 'U'}</div>
                         <div class="user-details">
                             <span class="user-name">${escapeHtml(currentUser.fullName)}</span>
-                            <span class="user-role-badge">${currentUser.role} (Sign Out)</span>
+                            <span class="user-role-badge">${currentUser.role === 'TRAVELER' ? 'CAPTAIN' : currentUser.role} (Sign Out)</span>
                         </div>
                     </div>
                 ` : `
@@ -1802,7 +1802,7 @@ function bindPostRenderListeners() {
                 registerFcmDeviceTokenMock();
                 activeModal = null;
                 renderApp();
-                showToast(`Authenticated! Logged in as ${currentUser.fullName} (${currentUser.role}).`, 'success');
+                showToast(`Authenticated! Logged in as ${currentUser.fullName} (${currentUser.role === 'TRAVELER' ? 'CAPTAIN' : currentUser.role}).`, 'success');
             } catch (err) {
                 console.error(err);
                 showToast('Sign In Error', 'error');
@@ -1850,7 +1850,7 @@ function bindPostRenderListeners() {
                 registerFcmDeviceTokenMock();
                 activeModal = null;
                 renderApp();
-                showToast(`Account Created! Logged in as ${currentUser.fullName} (${currentUser.role}).`, 'success');
+                showToast(`Account Created! Logged in as ${currentUser.fullName} (${currentUser.role === 'TRAVELER' ? 'CAPTAIN' : currentUser.role}).`, 'success');
             } catch (err) {
                 console.error(err);
                 showToast('Registration Error', 'error');
@@ -4893,7 +4893,8 @@ function renderCustomerProfile() {
         `;
     }
 
-    const capsDisplay = currentUser.capabilities ? currentUser.capabilities.join(', ') : currentUser.role;
+    const rawCaps = currentUser.capabilities ? currentUser.capabilities : [currentUser.role];
+    const capsDisplay = rawCaps.map(c => c === 'TRAVELER' ? 'CAPTAIN' : c).join(', ');
 
     return `
         <div class="map-first-layout">
