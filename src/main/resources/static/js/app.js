@@ -2730,7 +2730,7 @@ window.openTrackingModal = function(parcelId, tripId) {
 
 async function updateRoutePolyline(polyline, lat1, lng1, lat2, lng2) {
     try {
-        const res = await fetch(`http://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`);
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`);
         if (res.ok) {
             const data = await res.json();
             if (data.routes && data.routes.length > 0) {
