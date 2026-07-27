@@ -68,6 +68,9 @@ public class ParcelRequest {
     private Double calculatedFare;
     private LocalDateTime createdAt;
 
+    @Column(name = "is_auto_match")
+    private Boolean isAutoMatch;
+
     @PrePersist
     public void onCreate() {
         if (createdAt == null) {
@@ -75,6 +78,9 @@ public class ParcelRequest {
         }
         if (status == null) {
             status = ParcelStatus.CREATED;
+        }
+        if (isAutoMatch == null) {
+            isAutoMatch = false;
         }
     }
 }

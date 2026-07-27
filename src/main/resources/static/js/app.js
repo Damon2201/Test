@@ -449,6 +449,11 @@ function getUserName(userId) {
     return u ? u.fullName : `Captain Traveler #${userId}`;
 }
 
+function getUserMobile(userId) {
+    const u = usersCache.find(x => x.id === userId);
+    return u ? u.mobileNumber : '--';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadUserSession();
     initWebSocket();
@@ -1346,9 +1351,29 @@ function renderActiveModal() {
                         <h3>💬 P2P Handshake Chat (Booking #${selectedParcelForChat.id})</h3>
                         <button class="btn-close" onclick="closeModal()">✕</button>
                     </div>
-                    <div id="chat-messages-box" style="height:300px; overflow-y:auto; border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; background:var(--bg-surface);">
-                        <div style="color:var(--text-muted); text-align:center; padding-top:100px;">Loading messages...</div>
+                    <div id="chat-messages-box" style="height:250px; overflow-y:auto; border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; background:var(--bg-surface);">
+                        <div style="color:var(--text-muted); text-align:center; padding-top:80px;">Loading messages...</div>
                     </div>
+                    
+                    <!-- Price Negotiation Section -->
+                    <div style="background:var(--bg-surface); padding:12px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="color:var(--text-muted); font-size:10px; font-weight:700; text-transform:uppercase;">Agreed Fare</div>
+                            <span style="font-size:16px; font-weight:800; color:var(--text-white);">₹${Math.round(selectedParcelForChat.calculatedFare)}</span>
+                        </div>
+                        ${currentUser.role === 'TRAVELER' && selectedParcelForChat.status === 'ACCEPTED' ? `
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <input type="number" id="negotiated-price-input" class="form-control" style="width:80px; padding:6px 12px; font-size:12px;" value="${Math.round(selectedParcelForChat.calculatedFare)}" />
+                                <button type="button" class="btn-book" style="background:var(--primary-gradient); padding:6px 10px; font-size:11px;" onclick="submitNegotiatedPrice(${selectedParcelForChat.id})">Set Price</button>
+                            </div>
+                        ` : `
+                            <div style="text-align:right;">
+                                <div style="color:var(--text-muted); font-size:10px; font-weight:700; text-transform:uppercase;">Handshake Status</div>
+                                <span class="verified-badge" style="font-size:10px; text-transform:uppercase; ${selectedParcelForChat.status === 'ACCEPTED' ? 'background:rgba(245,158,11,0.15); color:var(--warning); border-color:rgba(245,158,11,0.3);' : 'background:rgba(16,185,129,0.15); color:var(--accent-green); border-color:rgba(16,185,129,0.3);'}">${escapeHtml(selectedParcelForChat.status)}</span>
+                            </div>
+                        `}
+                    </div>
+
                     <form id="chat-send-form" onsubmit="sendChatMessageBtn(event)">
                         <div style="display:flex; gap:12px;">
                             <input type="text" id="chat-input-text" class="form-control" placeholder="Type your message here..." style="padding-left:16px;" required />
@@ -2137,9 +2162,19 @@ async function fetchParcelsForSender() {
             let otpStatusHtml = '';
 
             if (p.status === 'CREATED') {
-                actionBtnHtml = `<span style="font-weight:700; color:var(--warning); font-size:13px;">Awaiting Traveler Acceptance</span>`;
+                actionBtnHtml = `
+                    <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+                        <span class="verified-badge" style="background:rgba(245,158,11,0.15); color:var(--warning); border-color:rgba(245,158,11,0.3); font-size:10px;">PENDING ACCEPTANCE</span>
+                        <button class="btn-book" style="background:var(--danger); box-shadow:0 4px 15px rgba(239,68,68,0.2); font-size:11px; padding:4px 10px;" onclick="rejectParcelBooking(${p.id})">Cancel Request</button>
+                    </div>
+                `;
             } else if (p.status === 'ACCEPTED') {
-                actionBtnHtml = `<button class="btn-book" style="background:var(--primary-gradient); box-shadow:0 4px 15px var(--primary-glow);" onclick="payEscrowRazorpay(${p.id})">Pay Escrow</button>`;
+                actionBtnHtml = `
+                    <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                        <span style="font-size:10px; color:var(--warning); font-weight:700;">💬 Negotiate price in Chat</span>
+                        <button class="btn-book" style="background:var(--primary-gradient); box-shadow:0 4px 15px var(--primary-glow);" onclick="payEscrowRazorpay(${p.id})">Pay Escrow</button>
+                    </div>
+                `;
             } else if (p.status === 'PAID_ESCROW') {
                 actionBtnHtml = `<span style="font-weight:700; color:var(--accent-green); font-size:13px;">🔒 Escrow Paid (Held)</span>`;
                 otpStatusHtml = `
@@ -2172,7 +2207,7 @@ async function fetchParcelsForSender() {
             } else if (p.status === 'DELIVERED') {
                 actionBtnHtml = `<span style="font-weight:700; color:var(--accent-green); font-size:13px;">✅ Cargo Delivered & Funds Released</span>`;
             } else if (p.status === 'CANCELLED') {
-                actionBtnHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled & Refunded</span>`;
+                actionBtnHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled</span>`;
             }
 
             let chatBtnHtml = '';
@@ -2279,9 +2314,17 @@ async function fetchParcelsForCaptain() {
                                 <span style="font-size:11px; color:var(--text-muted); font-weight:700;">CARGO ID: #${p.id}</span>
                                 <h3 style="font-size:16px; font-weight:800; margin-top:2px;">${escapeHtml(p.goodsDescription)}</h3>
                             </div>
-                            <span class="verified-badge" style="text-transform:uppercase;">${escapeHtml(p.status)}</span>
+                            <span class="verified-badge" style="text-transform:uppercase; ${p.status === 'CREATED' ? 'background:rgba(245,158,11,0.15); color:var(--warning); border-color:rgba(245,158,11,0.3);' : ''}">${p.status === 'CREATED' ? 'PENDING REQUEST' : escapeHtml(p.status)}</span>
                         </div>
                         <div style="font-size:12px; color:var(--text-body); margin-bottom:12px;">
+                            ${p.status === 'CREATED' ? `
+                                <div style="background:var(--bg-surface); padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid var(--border);">
+                                    <div style="color:var(--text-white); font-weight:700; margin-bottom:4px;">👤 Sender Details</div>
+                                    <div style="font-size:11px; color:var(--text-white);">Name: <b>${escapeHtml(getUserName(p.senderId))}</b></div>
+                                    <div style="font-size:11px; color:var(--text-white);">Mobile: <b>${escapeHtml(getUserMobile(p.senderId))}</b></div>
+                                    <div style="font-size:11px; color:var(--porter-teal); margin-top:6px; font-weight:600;">📍 Pickup Area: ${escapeHtml(p.pickupLocation)}</div>
+                                </div>
+                            ` : ''}
                             <div><b>Route:</b> ${escapeHtml(p.pickupLocation)} ➔ ${escapeHtml(p.dropoffLocation)}</div>
                             <div><b>Weight:</b> ${p.estimatedWeightKg} kg | <b>Earnings:</b> ₹${Math.round(p.calculatedFare)}</div>
                         </div>
@@ -2711,6 +2754,30 @@ window.sendChatMessageBtn = async function(e) {
         }
     } catch (err) {
         showToast('Network error while sending message', 'error');
+    }
+};
+
+window.submitNegotiatedPrice = async function(parcelId) {
+    const val = document.getElementById('negotiated-price-input').value;
+    if (!val || isNaN(val) || parseFloat(val) <= 0) {
+        showToast('Please enter a valid fare price!', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`${API_BASE}/parcels/${parcelId}/fare?fare=${parseFloat(val)}&travelerId=${currentUser.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            showToast('Agreed price updated successfully!', 'success');
+            selectedParcelForChat = await res.json();
+            renderApp();
+        } else {
+            const err = await res.json();
+            showToast(`Failed to update price: ${err.message || 'Error'}`, 'error');
+        }
+    } catch (err) {
+        showToast('Network error setting negotiated price', 'error');
     }
 };
 

@@ -45,6 +45,12 @@ public class ParcelController {
         return parcelService.acceptParcelRequest(id, travelerId);
     }
 
+    @PutMapping("/{id}/fare")
+    @RequireRole(User.UserRole.TRAVELER)
+    public ParcelRequest updateParcelFare(@PathVariable Long id, @RequestParam Double fare, @RequestParam Long travelerId) {
+        return parcelService.updateParcelFare(id, fare, travelerId);
+    }
+
     @PostMapping("/{id}/create-payment-order")
     @RequireRole(User.UserRole.SENDER)
     public com.example.project.blabla_porter.dto.RazorpayOrderResponse createPaymentOrder(@PathVariable Long id, @RequestParam Long senderId) {

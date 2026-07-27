@@ -217,6 +217,7 @@ public class ParcelService {
                 .dropoffLongitude(req.getDropoffLongitude())
                 .status(ParcelRequest.ParcelStatus.CREATED)
                 .calculatedFare(quote.getTotalFareInr())
+                .isAutoMatch(req.getTripId() == null)
                 .build();
 
         return parcelRequestRepository.save(request);
@@ -444,7 +445,7 @@ public class ParcelService {
             return request;
         }
 
-        // Traveler is rejecting/cancelling: auto-route to next traveler
+        // Traveler is rejecting/cancelling: auto-route only if isAutoMatch was true
         Long previousTripId = request.getTripId();
 
         // Release capacity on the old trip
@@ -455,46 +456,59 @@ public class ParcelService {
             });
         }
 
-        List<Trip> activeTrips = tripRepository.findByStatus(Trip.TripStatus.PLANNED);
-        Trip nextMatched = null;
-        for (Trip t : activeTrips) {
-            if (previousTripId != null) {
-                if (t.getId().equals(previousTripId)) {
-                    continue; // skip the rejecting trip
-                }
-                // Order to prevent cyclic assignment: only route to trips departing after,
-                // or if at the same time, with a strictly higher trip ID
-                Trip prevTrip = tripRepository.findById(previousTripId).orElse(null);
-                if (prevTrip != null) {
-                    if (t.getDepartureTime().isBefore(prevTrip.getDepartureTime())) {
-                        continue;
+        if (Boolean.TRUE.equals(request.getIsAutoMatch())) {
+            List<Trip> activeTrips = tripRepository.findByStatus(Trip.TripStatus.PLANNED);
+            Trip nextMatched = null;
+            for (Trip t : activeTrips) {
+                if (previousTripId != null) {
+                    if (t.getId().equals(previousTripId)) {
+                        continue; // skip the rejecting trip
                     }
-                    if (t.getDepartureTime().isEqual(prevTrip.getDepartureTime()) && t.getId() <= prevTrip.getId()) {
-                        continue;
+                    // Order to prevent cyclic assignment: only route to trips departing after,
+                    // or if at the same time, with a strictly higher trip ID
+                    Trip prevTrip = tripRepository.findById(previousTripId).orElse(null);
+                    if (prevTrip != null) {
+                        if (t.getDepartureTime().isBefore(prevTrip.getDepartureTime())) {
+                            continue;
+                        }
+                        if (t.getDepartureTime().isEqual(prevTrip.getDepartureTime()) && t.getId() <= prevTrip.getId()) {
+                            continue;
+                        }
                     }
                 }
-            }
-            if (matchesLocation(t.getSource(), request.getPickupLocation()) &&
-                matchesLocation(t.getDestination(), request.getDropoffLocation())) {
-                if (t.getAvailableCapacityKg() >= reqWeight) {
-                    if (t.getDepartureTime().isAfter(java.time.LocalDateTime.now())) {
-                        if (nextMatched == null || t.getDepartureTime().isBefore(nextMatched.getDepartureTime())) {
-                            nextMatched = t;
+                if (matchesLocation(t.getSource(), request.getPickupLocation()) &&
+                    matchesLocation(t.getDestination(), request.getDropoffLocation())) {
+                    if (t.getAvailableCapacityKg() >= reqWeight) {
+                        if (t.getDepartureTime().isAfter(java.time.LocalDateTime.now())) {
+                            if (nextMatched == null || t.getDepartureTime().isBefore(nextMatched.getDepartureTime())) {
+                                nextMatched = t;
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (nextMatched != null) {
-            Trip lockedNextTrip = tripRepository.findByIdForUpdate(nextMatched.getId()).orElse(null);
-            if (lockedNextTrip != null && lockedNextTrip.getAvailableCapacityKg() >= reqWeight) {
-                request.setTripId(lockedNextTrip.getId());
-                request.setStatus(ParcelRequest.ParcelStatus.CREATED);
-                parcelRequestRepository.save(request);
+            if (nextMatched != null) {
+                Trip lockedNextTrip = tripRepository.findByIdForUpdate(nextMatched.getId()).orElse(null);
+                if (lockedNextTrip != null && lockedNextTrip.getAvailableCapacityKg() >= reqWeight) {
+                    request.setTripId(lockedNextTrip.getId());
+                    request.setStatus(ParcelRequest.ParcelStatus.CREATED);
+                    parcelRequestRepository.save(request);
 
-                lockedNextTrip.setAvailableCapacityKg(Math.max(0.0, lockedNextTrip.getAvailableCapacityKg() - reqWeight));
-                tripRepository.save(lockedNextTrip);
+                    lockedNextTrip.setAvailableCapacityKg(Math.max(0.0, lockedNextTrip.getAvailableCapacityKg() - reqWeight));
+                    tripRepository.save(lockedNextTrip);
+                } else {
+                    request.setTripId(null);
+                    request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);
+                    parcelRequestRepository.save(request);
+
+                    paymentRepository.findByParcelRequestId(parcelRequestId).ifPresent(payment -> {
+                        if (payment.getStatus() == Payment.EscrowStatus.HELD) {
+                            payment.setStatus(Payment.EscrowStatus.REFUNDED);
+                            paymentRepository.save(payment);
+                        }
+                    });
+                }
             } else {
                 request.setTripId(null);
                 request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);
@@ -508,6 +522,7 @@ public class ParcelService {
                 });
             }
         } else {
+            // Direct request rejected — cancel and do not auto-route
             request.setTripId(null);
             request.setStatus(ParcelRequest.ParcelStatus.CANCELLED);
             parcelRequestRepository.save(request);
@@ -521,6 +536,33 @@ public class ParcelService {
         }
 
         return request;
+    }
+
+    @Transactional
+    public ParcelRequest updateParcelFare(Long parcelRequestId, Double fare, Long travelerId) {
+        ParcelRequest request = getById(parcelRequestId);
+        Trip trip = tripRepository.findById(request.getTripId())
+                .orElseThrow(() -> new RuntimeException("Trip not found"));
+
+        if (!trip.getTravelerId().equals(travelerId)) {
+            throw new IllegalArgumentException("Only the designated traveler for this trip can update the fare!");
+        }
+
+        if (request.getStatus() != ParcelRequest.ParcelStatus.ACCEPTED) {
+            throw new IllegalStateException("Parcel request must be in ACCEPTED status to negotiate fare!");
+        }
+
+        request.setCalculatedFare(fare);
+        ParcelRequest saved = parcelRequestRepository.save(request);
+
+        // Broadcast update via WebSocket
+        try {
+            messagingTemplate.convertAndSend("/topic/trip/" + saved.getTripId(), saved);
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast WebSocket update on updateParcelFare: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     public ParcelRequest getById(Long id) {
