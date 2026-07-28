@@ -481,7 +481,37 @@ document.addEventListener('DOMContentLoaded', () => {
     initWebSocket();
     registerFcmDeviceTokenMock();
     renderApp();
+    refreshUserKycStatus();
 });
+
+async function refreshUserKycStatus() {
+    if (!currentUser || !currentUser.id || !currentUser.token) return;
+    try {
+        const res = await fetch(`${API_BASE}/auth/users/${currentUser.id}`, { headers: getAuthHeaders() });
+        if (res.ok) {
+            const updatedUser = await res.json();
+            let changed = false;
+            if (currentUser.kycStatus !== updatedUser.kycStatus) {
+                currentUser.kycStatus = updatedUser.kycStatus;
+                changed = true;
+            }
+            if (currentUser.averageRating !== updatedUser.averageRating) {
+                currentUser.averageRating = updatedUser.averageRating;
+                changed = true;
+            }
+            if (currentUser.totalRatingsCount !== updatedUser.totalRatingsCount) {
+                currentUser.totalRatingsCount = updatedUser.totalRatingsCount;
+                changed = true;
+            }
+            if (changed) {
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                renderApp();
+            }
+        }
+    } catch (e) {
+        console.error("Failed to refresh user status:", e);
+    }
+}
 
 function loadUserSession() {
     const saved = localStorage.getItem('currentUser');
@@ -499,6 +529,7 @@ function loadUserSession() {
                 }
                 parsed.role = claims.role; // Enforce role from JWT claim
                 parsed.id = parseInt(claims.sub);
+                parsed.capabilities = claims.roles || []; // Enforce capabilities from JWT claims
             }
             currentUser = parsed;
         } catch (e) {
@@ -5490,6 +5521,20 @@ function renderCustomerProfile() {
                 <p style="color:var(--text-body); font-size:12px; line-height:1.5;">
                     You are verified! You can publish rides, accept passengers/parcels, and view your earnings via the **Captain** tab in the bottom navigation menu.
                 </p>
+            </div>
+        `;
+    } else if (currentUser.kycStatus === 'APPROVED' && !hasTravelerCap) {
+        captainSecHtml = `
+            <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px; border-color: var(--warning); background: rgba(245, 158, 11, 0.05);">
+                <h3 style="font-size:15px; font-weight:800; color:var(--warning); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    🎉 KYC Approved - Re-login Required
+                </h3>
+                <p style="color:var(--text-body); font-size:12px; line-height:1.5; margin-bottom:14px;">
+                    Congratulations! Your Captain KYC verification has been approved. To activate your Captain capabilities and start publishing trips, please sign out and sign in again.
+                </p>
+                <button class="btn-search" style="width:100%; border:none; background: var(--warning); color: var(--text-black);" onclick="logout()">
+                    🔑 Sign Out to Activate Captain Mode
+                </button>
             </div>
         `;
     } else if (currentUser.kycStatus === 'PENDING_APPROVAL') {
