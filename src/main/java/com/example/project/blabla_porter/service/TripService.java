@@ -35,6 +35,12 @@ public class TripService {
             }
         }
 
+        if ("PASSENGER".equalsIgnoreCase(traveler.getTravelMode())) {
+            if (req.getTicketOrPnrNumber() == null || req.getTicketOrPnrNumber().isBlank()) {
+                throw new IllegalArgumentException("Ticket or PNR number is mandatory for Passenger mode trips!");
+            }
+        }
+
         Trip trip = Trip.builder()
                 .travelerId(req.getTravelerId())
                 .source(req.getSource())
@@ -44,6 +50,7 @@ public class TripService {
                 .availableCapacityKg(req.getAvailableCapacityKg())
                 .availableSeats(req.getAvailableSeats())
                 .status(Trip.TripStatus.PLANNED)
+                .ticketOrPnrNumber(req.getTicketOrPnrNumber())
                 .build();
 
         Trip savedTrip = tripRepository.save(trip);

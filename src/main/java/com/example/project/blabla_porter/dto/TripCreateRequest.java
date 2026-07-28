@@ -30,4 +30,6 @@ public class TripCreateRequest {
 
     @PositiveOrZero(message = "Available seats cannot be negative")
     private Integer availableSeats;
+
+    private String ticketOrPnrNumber;
 }

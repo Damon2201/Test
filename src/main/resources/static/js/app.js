@@ -13,27 +13,20 @@ const API_BASE = (() => {
 
 window.toggleKycTravelModeFields = function(mode, prefix) {
     const drivingDiv = document.getElementById(`${prefix}-driving-fields`);
-    const passengerDiv = document.getElementById(`${prefix}-passenger-fields`);
-    
     const panInput = document.getElementById(`${prefix}-pan`);
     const dlInput = document.getElementById(`${prefix}-dl`);
     const rcInput = document.getElementById(`${prefix}-rc`);
-    const pnrInput = document.getElementById(`${prefix}-pnr`);
 
     if (mode === 'PASSENGER') {
         if (drivingDiv) drivingDiv.style.display = 'none';
-        if (passengerDiv) passengerDiv.style.display = 'block';
         if (panInput) panInput.removeAttribute('required');
         if (dlInput) dlInput.removeAttribute('required');
         if (rcInput) rcInput.removeAttribute('required');
-        if (pnrInput) pnrInput.setAttribute('required', 'required');
     } else {
         if (drivingDiv) drivingDiv.style.display = 'block';
-        if (passengerDiv) passengerDiv.style.display = 'none';
         if (panInput) panInput.setAttribute('required', 'required');
         if (dlInput) dlInput.setAttribute('required', 'required');
         if (rcInput) rcInput.setAttribute('required', 'required');
-        if (pnrInput) pnrInput.removeAttribute('required');
     }
 };
 
@@ -792,13 +785,47 @@ function renderKycRequiredScreen(kycStatus) {
                         <input type="text" id="kyc-rc" class="form-control" style="padding-left:16px;" value="KA-01-AB-1234" required />
                     </div>
                 </div>
-                <div id="kyc-passenger-fields" style="display:none;">
-                    <div class="form-group" style="margin-bottom:24px;">
-                        <label class="form-label">Travel Ticket / PNR Number</label>
-                        <input type="text" id="kyc-pnr" class="form-control" style="padding-left:16px;" placeholder="e.g. PNR-998877" />
+
+                <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green);">Submit KYC Documents</button>
+            </form>
+        </div>
+    `;
+}
+
+function renderPublishTripForm() {
+    return `
+        <div class="route-card">
+            <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📍 Publish Inter-City Route</h2>
+            <form id="captain-publish-form">
+                <div class="form-group" style="margin-bottom:14px; position:relative;">
+                    <label class="form-label">Origin City</label>
+                    <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" autocomplete="off" required />
+                    <div id="pub-origin-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
+                </div>
+                <div class="form-group" style="margin-bottom:14px; position:relative;">
+                    <label class="form-label">Destination City</label>
+                    <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" autocomplete="off" required />
+                    <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
+                </div>
+                
+                ${currentUser.travelMode === 'PASSENGER' ? `
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">Travel Ticket / PNR Number (Mandatory for Passenger Mode)</label>
+                    <input type="text" id="pub-pnr" class="form-control" style="padding-left:16px;" placeholder="e.g. PNR-987654" required />
+                </div>
+                ` : ''}
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
+                    <div class="form-group">
+                        <label class="form-label">Trunk Space (kg)</label>
+                        <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="25.0" step="0.5" required />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Seats</label>
+                        <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" value="3" required />
                     </div>
                 </div>
-                <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green);">Submit KYC Documents</button>
+                <button type="submit" class="btn-search" style="width:100%;">Publish Route</button>
             </form>
         </div>
     `;
@@ -818,32 +845,7 @@ function renderCaptainParcelPortal() {
             </div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom:40px;">
-            <div class="route-card">
-                <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📍 Publish Inter-City Route</h2>
-                <form id="captain-publish-form">
-                    <div class="form-group" style="margin-bottom:14px; position:relative;">
-                        <label class="form-label">Origin City</label>
-                        <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" autocomplete="off" required />
-                        <div id="pub-origin-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                    </div>
-                    <div class="form-group" style="margin-bottom:14px; position:relative;">
-                        <label class="form-label">Destination City</label>
-                        <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" autocomplete="off" required />
-                        <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                    </div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
-                        <div class="form-group">
-                            <label class="form-label">Trunk Space (kg)</label>
-                            <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="25.0" step="0.5" required />
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Seats</label>
-                            <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" value="3" required />
-                        </div>
-                    </div>
-                    <button type="submit" class="btn-search" style="width:100%;">Publish Route</button>
-                </form>
-            </div>
+            ${renderPublishTripForm()}
             <div class="route-card">
                 <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📡 Live Telemetry GPS Broadcaster</h2>
                 <div id="telemetry-map" style="height:180px; border-radius:12px; margin-bottom:12px; border:1px solid var(--border); z-index:1;"></div>
@@ -900,32 +902,7 @@ function renderCaptainCarpoolPortal() {
             </div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom:40px;">
-            <div class="route-card">
-                <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📍 Publish Inter-City Route</h2>
-                <form id="captain-publish-form">
-                    <div class="form-group" style="margin-bottom:14px; position:relative;">
-                        <label class="form-label">Origin City</label>
-                        <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" autocomplete="off" required />
-                        <div id="pub-origin-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                    </div>
-                    <div class="form-group" style="margin-bottom:14px; position:relative;">
-                        <label class="form-label">Destination City</label>
-                        <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" autocomplete="off" required />
-                        <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                    </div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
-                        <div class="form-group">
-                            <label class="form-label">Trunk Space (kg)</label>
-                            <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="25.0" step="0.5" required />
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Seats</label>
-                            <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" value="3" required />
-                        </div>
-                    </div>
-                    <button type="submit" class="btn-search" style="width:100%;">Publish Route</button>
-                </form>
-            </div>
+            ${renderPublishTripForm()}
             <div class="route-card">
                 <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📡 Live Telemetry GPS Broadcaster</h2>
                 <div id="telemetry-map" style="height:180px; border-radius:12px; margin-bottom:12px; border:1px solid var(--border); z-index:1;"></div>
@@ -1045,6 +1022,7 @@ async function fetchTripsForCaptainDashboard() {
                         <div><b>Departure:</b> ${new Date(t.departureTime).toLocaleString()}</div>
                         <div><b>Trunk Capacity:</b> ${t.availableCapacityKg} kg Remaining</div>
                         <div><b>Passenger Seats:</b> ${t.availableSeats} Remaining</div>
+                        ${t.ticketOrPnrNumber ? `<div><b>PNR / Ticket:</b> <span style="font-family:monospace; font-weight:700; color:var(--porter-teal);">${escapeHtml(t.ticketOrPnrNumber)}</span></div>` : ''}
                     </div>
                 `;
                 container.appendChild(card);
@@ -1200,149 +1178,6 @@ window.completePassengerRide = async function(rideId) {
         showToast('Error completing ride', 'error');
     }
 };
-
-// ----------------------------------------------------------------------------
-// 2. CAPTAIN / TRAVELER PORTAL (Rendered ONLY for TRAVELER role)
-// ----------------------------------------------------------------------------
-function renderCaptainPortal() {
-    const kycStatus = currentUser.kycStatus || 'NOT_SUBMITTED';
-
-    if (kycStatus !== 'APPROVED') {
-        return `
-            <div class="hero-card">
-                <div class="hero-header">
-                    <div class="hero-subtitle">🚗 Captain / Traveler Driver Portal</div>
-                    <h1 class="hero-title">Driver KYC Document Verification</h1>
-                </div>
-            </div>
-            <div class="route-card" style="max-width: 600px; margin: 0 auto;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                    <h2 style="font-size:20px; font-weight:800;">🪪 Driver Verification Required</h2>
-                    <span class="verified-badge" style="background:rgba(245,158,11,0.15); color:var(--warning);">STATUS: ${kycStatus}</span>
-                </div>
-                <p style="font-size:13px; color:var(--text-body); margin-bottom:24px; line-height:1.5;">
-                    ⚠️ Mandatory Driver Protocol: Captains must submit Aadhaar, PAN, Driving Licence, and Vehicle RC to obtain Admin approval before publishing trips.
-                </p>
-                <form id="captain-kyc-form">
-                    <div class="form-group" style="margin-bottom:14px;">
-                        <label class="form-label">Aadhaar Card (12 Digits)</label>
-                        <input type="text" id="kyc-aadhaar" class="form-control" style="padding-left:16px;" value="1234-5678-9012" required />
-                    </div>
-                    <div class="form-group" style="margin-bottom:14px;">
-                        <label class="form-label">PAN Card Number</label>
-                        <input type="text" id="kyc-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" required />
-                    </div>
-                    <div class="form-group" style="margin-bottom:14px;">
-                        <label class="form-label">Driving Licence Number</label>
-                        <input type="text" id="kyc-dl" class="form-control" style="padding-left:16px;" value="DL-12345-KAR" required />
-                    </div>
-                    <div class="form-group" style="margin-bottom:24px;">
-                        <label class="form-label">Vehicle RC Number</label>
-                        <input type="text" id="kyc-rc" class="form-control" style="padding-left:16px;" value="KA-01-AB-1234" required />
-                    </div>
-                    <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green);">Submit KYC Documents</button>
-                </form>
-            </div>
-        `;
-    }
-
-    return `
-        <div class="hero-card">
-            <div class="hero-header">
-                <div class="hero-subtitle">🚗 Captain Driver Portal (KYC APPROVED)</div>
-                <h1 class="hero-title">Publish Inter-City Routes & Broadcast GPS</h1>
-            </div>
-        </div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom:40px;">
-            <div class="route-card">
-                <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📍 Publish Inter-City Route</h2>
-                <form id="captain-publish-form">
-                    <div class="form-group" style="margin-bottom:14px; position:relative;">
-                        <label class="form-label">Origin City</label>
-                        <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" autocomplete="off" required />
-                        <div id="pub-origin-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                    </div>
-                    <div class="form-group" style="margin-bottom:14px; position:relative;">
-                        <label class="form-label">Destination City</label>
-                        <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" autocomplete="off" required />
-                        <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                    </div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
-                        <div class="form-group">
-                            <label class="form-label">Trunk Space (kg)</label>
-                            <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="25.0" step="0.5" required />
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Seats</label>
-                            <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" value="3" required />
-                        </div>
-                    </div>
-                    <button type="submit" class="btn-search" style="width:100%;">Publish Route</button>
-                </form>
-            </div>
-            <div class="route-card">
-                <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📡 Live Telemetry GPS Broadcaster</h2>
-                <div id="telemetry-map" style="height:180px; border-radius:12px; margin-bottom:12px; border:1px solid var(--border); z-index:1;"></div>
-                <form id="gps-broadcast-form">
-                    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
-                        <div>
-                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Latitude</label>
-                            <input type="number" id="gps-lat" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="12.9716" step="0.0001" required />
-                        </div>
-                        <div>
-                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Longitude</label>
-                            <input type="number" id="gps-lng" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="77.5946" step="0.0001" required />
-                        </div>
-                        <div>
-                            <label class="form-label" style="font-size:10px; text-align:center; display:block;">Speed (km/h)</label>
-                            <input type="number" id="gps-speed" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="85.0" step="0.1" required />
-                        </div>
-                    </div>
-                    <button type="button" id="btn-device-gps" class="btn-search" style="width:100%; margin-bottom:10px; background:var(--bg-surface); color:var(--text-title); border:1px solid var(--border);">📍 Use Device GPS</button>
-                    <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient);">Broadcast Live GPS Telemetry</button>
-                </form>
-            </div>
-        </div>
-
-        <div class="section-header">
-            <h2 class="section-title">Manage Cargo Bookings & Handover Verification</h2>
-            <span class="section-tag">Fulfill Accepted Deliveries</span>
-        </div>
-
-        <div id="captain-parcels-container" class="cards-grid" style="margin-bottom:32px;">
-            <div style="color:var(--text-body); padding:40px;">Loading cargo list...</div>
-        </div>
-
-        <div class="section-header">
-            <h2 class="section-title">🚖 Same-City Local Taxi Mode</h2>
-            <span class="section-tag">On-Demand Same-City Rides</span>
-        </div>
-        <div class="route-card" style="margin-bottom:40px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                <h3 style="font-size:18px; font-weight:800; color:var(--text-white);">Toggle Local Availability</h3>
-                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                    <input type="checkbox" id="local-taxi-available-toggle" onchange="toggleLocalTaxiAvailabilityBtn(this.checked)" style="transform:scale(1.2);" />
-                    <span style="font-weight:700; font-size:13px; color:var(--danger);" id="local-taxi-toggle-label">OFFLINE</span>
-                </label>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
-                <div>
-                    <label class="form-label">Current Latitude</label>
-                    <input type="number" id="local-gps-lat" class="form-control" value="12.9716" step="0.0001" onchange="updateLocalGpsCoordinates()" />
-                </div>
-                <div>
-                    <label class="form-label">Current Longitude</label>
-                    <input type="number" id="local-gps-lng" class="form-control" value="77.5946" step="0.0001" onchange="updateLocalGpsCoordinates()" />
-                </div>
-            </div>
-            
-            <h4 style="font-size:14px; font-weight:800; margin-top:24px; margin-bottom:12px; color:var(--porter-teal);">Active Local Taxi Assignments</h4>
-            <div id="captain-local-bookings-container">
-                <div style="color:var(--text-muted); font-size:13px;">No active local assignments. Make yourself available above.</div>
-            </div>
-        </div>
-    `;
-}
 
 // ----------------------------------------------------------------------------
 // 3. PASSENGER RIDER PORTAL (Rendered ONLY for RIDER role)
@@ -1649,12 +1484,7 @@ function renderActiveModal() {
                                         <input type="text" id="reg-rc" class="form-control" style="padding-left:16px;" placeholder="e.g. RC-9988-AA" />
                                     </div>
                                 </div>
-                                <div id="reg-passenger-fields" style="display:none;">
-                                    <div class="form-group" style="margin-bottom:0px;">
-                                        <label class="form-label">Travel Ticket / PNR Number</label>
-                                        <input type="text" id="reg-pnr" class="form-control" style="padding-left:16px;" placeholder="e.g. PNR-123456" />
-                                    </div>
-                                </div>
+
                             </div>
 
                             <div id="otp-verification-container" style="display:none; border:1px solid var(--porter-teal); padding:14px; border-radius:12px; margin-bottom:14px; background:rgba(6,182,212,0.05);">
@@ -2121,12 +1951,7 @@ function renderActiveModal() {
                                 <input type="text" id="apply-rc" class="form-control" style="padding-left:16px;" value="RC-9988-AA" placeholder="RC Number" required />
                             </div>
                         </div>
-                        <div id="apply-passenger-fields" style="display:none;">
-                            <div class="form-group" style="margin-bottom:20px;">
-                                <label class="form-label">Travel Ticket / PNR Number</label>
-                                <input type="text" id="apply-pnr" class="form-control" style="padding-left:16px;" placeholder="e.g. PNR-998877" />
-                            </div>
-                        </div>
+
                         <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient);">Submit KYC Application</button>
                     </form>
             ${wrapEnd}
@@ -2444,12 +2269,10 @@ function bindPostRenderListeners() {
                 payload.travelMode = mode;
                 payload.aadhaarNumber = document.getElementById('reg-aadhaar').value;
                 if (mode === 'PASSENGER') {
-                    payload.ticketOrPnrNumber = document.getElementById('reg-pnr').value;
                     payload.panNumber = null;
                     payload.drivingLicenceNumber = null;
                     payload.rcNumber = null;
                 } else {
-                    payload.ticketOrPnrNumber = null;
                     payload.panNumber = document.getElementById('reg-pan').value;
                     payload.drivingLicenceNumber = document.getElementById('reg-dl').value;
                     payload.rcNumber = document.getElementById('reg-rc').value;
@@ -2494,8 +2317,7 @@ function bindPostRenderListeners() {
                 panNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-pan').value,
                 drivingLicenceNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-dl').value,
                 rcNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-rc').value,
-                travelMode: mode,
-                ticketOrPnrNumber: mode === 'PASSENGER' ? document.getElementById('kyc-pnr').value : null
+                travelMode: mode
             };
 
             try {
@@ -2532,6 +2354,10 @@ function bindPostRenderListeners() {
                 availableCapacityKg: parseFloat(document.getElementById('pub-kg').value),
                 availableSeats: parseInt(document.getElementById('pub-seats').value)
             };
+            if (currentUser.travelMode === 'PASSENGER') {
+                const pnrEl = document.getElementById('pub-pnr');
+                payload.ticketOrPnrNumber = pnrEl ? pnrEl.value.trim() : '';
+            }
 
             try {
                 const res = await fetch(`${API_BASE}/trips`, {
@@ -5804,7 +5630,6 @@ window.submitApplyKycForm = async function(event) {
     const pan = mode === 'PASSENGER' ? null : document.getElementById('apply-pan').value;
     const dl = mode === 'PASSENGER' ? null : document.getElementById('apply-dl').value;
     const rc = mode === 'PASSENGER' ? null : document.getElementById('apply-rc').value;
-    const pnr = mode === 'PASSENGER' ? document.getElementById('apply-pnr').value : null;
     
     try {
         const res = await fetch(`${API_BASE}/kyc/submit`, {
@@ -5816,8 +5641,7 @@ window.submitApplyKycForm = async function(event) {
                 panNumber: pan,
                 drivingLicenceNumber: dl,
                 rcNumber: rc,
-                travelMode: mode,
-                ticketOrPnrNumber: pnr
+                travelMode: mode
             })
         });
         if (res.ok) {
@@ -5825,7 +5649,6 @@ window.submitApplyKycForm = async function(event) {
             currentUser.kycStatus = 'PENDING_APPROVAL';
             currentUser.role = 'TRAVELER';
             currentUser.travelMode = mode;
-            currentUser.ticketOrPnrNumber = pnr;
             if (currentUser.capabilities && !currentUser.capabilities.includes('TRAVELER')) {
                 // keep the SENDER/RIDER capabilities list as is but update kycStatus
             }

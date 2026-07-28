@@ -279,4 +279,93 @@ public class BlaBlaPorterPhase1Tests {
         assertEquals(1, contacts.size());
         assertEquals("9112233445", contacts.get(0).getContactPhoneNumber());
     }
+
+    @Test
+    @DisplayName("Scenario 11: Passenger KYC submission requires only Aadhaar and rejects PNR at KYC stage")
+    void test11_passengerKycOnlyAadhaar() {
+        RegisterRequest regReq = new RegisterRequest();
+        regReq.setFullName("Passenger Captain");
+        regReq.setMobileNumber("9876543219");
+        regReq.setRole(User.UserRole.TRAVELER);
+        User traveler = userService.register(regReq);
+
+        KycSubmitRequest kycReq = new KycSubmitRequest();
+        kycReq.setUserId(traveler.getId());
+        kycReq.setAadhaarNumber("1234-5678-8888");
+        kycReq.setTravelMode("PASSENGER");
+        // No DL, RC, PAN, PNR provided
+
+        User updatedUser = userService.submitKyc(kycReq);
+        assertEquals(User.KycStatus.PENDING_APPROVAL, updatedUser.getKycStatus());
+        assertNull(updatedUser.getTicketOrPnrNumber(), "PNR must not be saved at KYC stage");
+    }
+
+    @Test
+    @DisplayName("Scenario 12: Passenger-mode traveler publishing a trip is validated for PNR number")
+    void test12_passengerTripPnrValidation() {
+        RegisterRequest regReq = new RegisterRequest();
+        regReq.setFullName("Passenger Captain Two");
+        regReq.setMobileNumber("9876543220");
+        regReq.setRole(User.UserRole.TRAVELER);
+        User traveler = userService.register(regReq);
+
+        KycSubmitRequest kycReq = new KycSubmitRequest();
+        kycReq.setUserId(traveler.getId());
+        kycReq.setAadhaarNumber("1234-5678-8888");
+        kycReq.setTravelMode("PASSENGER");
+        userService.submitKyc(kycReq);
+        userService.reviewKyc(traveler.getId(), true);
+
+        // Try creating a trip without PNR
+        TripCreateRequest tripReq = new TripCreateRequest();
+        tripReq.setTravelerId(traveler.getId());
+        tripReq.setSource("Bengaluru");
+        tripReq.setDestination("Hyderabad");
+        tripReq.setDepartureTime(LocalDateTime.now().plusDays(2));
+        tripReq.setAvailableSeats(2);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
+            tripService.createTrip(tripReq);
+        });
+        assertTrue(ex.getMessage().contains("Ticket or PNR number is mandatory"));
+
+        // Now supply PNR
+        tripReq.setTicketOrPnrNumber("PNR-998877");
+        Trip trip = tripService.createTrip(tripReq);
+        assertNotNull(trip.getId());
+        assertEquals("PNR-998877", trip.getTicketOrPnrNumber());
+    }
+
+    @Test
+    @DisplayName("Scenario 13: Driving-mode traveler publishing a trip does NOT require PNR and works with null")
+    void test13_drivingTripNoPnr() {
+        RegisterRequest regReq = new RegisterRequest();
+        regReq.setFullName("Driver Captain One");
+        regReq.setMobileNumber("9876543221");
+        regReq.setRole(User.UserRole.TRAVELER);
+        User traveler = userService.register(regReq);
+
+        KycSubmitRequest kycReq = new KycSubmitRequest();
+        kycReq.setUserId(traveler.getId());
+        kycReq.setAadhaarNumber("1234-5678-7777");
+        kycReq.setPanNumber("ABCDE7777F");
+        kycReq.setDrivingLicenceNumber("DL-777888");
+        kycReq.setRcNumber("KA-01-AB-7777");
+        kycReq.setTravelMode("DRIVING");
+        userService.submitKyc(kycReq);
+        userService.reviewKyc(traveler.getId(), true);
+
+        TripCreateRequest tripReq = new TripCreateRequest();
+        tripReq.setTravelerId(traveler.getId());
+        tripReq.setSource("Bengaluru");
+        tripReq.setDestination("Hyderabad");
+        tripReq.setDepartureTime(LocalDateTime.now().plusDays(2));
+        tripReq.setAvailableCapacityKg(20.0);
+        tripReq.setAvailableSeats(3);
+        // No PNR provided
+
+        Trip trip = tripService.createTrip(tripReq);
+        assertNotNull(trip.getId());
+        assertNull(trip.getTicketOrPnrNumber(), "Driver trip should have null PNR");
+    }
 }

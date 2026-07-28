@@ -20,7 +20,6 @@ public class KycSubmitRequest {
     private String drivingLicenceNumber;
     private String rcNumber;
     private String travelMode;
-    private String ticketOrPnrNumber;
 
     private String insuranceNumber;
     private String pucNumber;

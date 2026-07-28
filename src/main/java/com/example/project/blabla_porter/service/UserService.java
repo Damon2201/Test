@@ -56,8 +56,7 @@ public class UserService {
         if (req.getRole() == User.UserRole.TRAVELER) {
             boolean hasKycDocs;
             if ("PASSENGER".equalsIgnoreCase(mode)) {
-                hasKycDocs = (req.getAadhaarNumber() != null && !req.getAadhaarNumber().isBlank()) &&
-                             (req.getTicketOrPnrNumber() != null && !req.getTicketOrPnrNumber().isBlank());
+                hasKycDocs = (req.getAadhaarNumber() != null && !req.getAadhaarNumber().isBlank());
             } else {
                 hasKycDocs = (req.getAadhaarNumber() != null && !req.getAadhaarNumber().isBlank()) &&
                              (req.getPanNumber() != null && !req.getPanNumber().isBlank()) &&
@@ -81,7 +80,7 @@ public class UserService {
                 .drivingLicenceNumber("PASSENGER".equalsIgnoreCase(mode) ? null : req.getDrivingLicenceNumber())
                 .rcNumber("PASSENGER".equalsIgnoreCase(mode) ? null : req.getRcNumber())
                 .travelMode(mode)
-                .ticketOrPnrNumber("PASSENGER".equalsIgnoreCase(mode) ? req.getTicketOrPnrNumber() : null)
+                .ticketOrPnrNumber(null)
                 .build();
 
         return userRepository.save(user);
@@ -173,12 +172,11 @@ public class UserService {
         user.setTravelMode(mode);
 
         if ("PASSENGER".equalsIgnoreCase(mode)) {
-            if (req.getAadhaarNumber() == null || req.getAadhaarNumber().isBlank() ||
-                req.getTicketOrPnrNumber() == null || req.getTicketOrPnrNumber().isBlank()) {
-                throw new IllegalArgumentException("Aadhaar number and Travel ticket/PNR number are mandatory for Passenger KYC submission!");
+            if (req.getAadhaarNumber() == null || req.getAadhaarNumber().isBlank()) {
+                throw new IllegalArgumentException("Aadhaar number is mandatory for Passenger KYC submission!");
             }
             user.setAadhaarNumber(req.getAadhaarNumber());
-            user.setTicketOrPnrNumber(req.getTicketOrPnrNumber());
+            user.setTicketOrPnrNumber(null);
             user.setPanNumber(null);
             user.setDrivingLicenceNumber(null);
             user.setRcNumber(null);

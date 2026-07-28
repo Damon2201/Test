@@ -37,5 +37,4 @@ public class RegisterRequest {
     private String registrationOtp;
 
     private String travelMode;
-    private String ticketOrPnrNumber;
 }

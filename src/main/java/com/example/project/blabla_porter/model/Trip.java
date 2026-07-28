@@ -57,6 +57,8 @@ public class Trip {
 
     private LocalDateTime createdAt;
 
+    private String ticketOrPnrNumber;
+
     @PrePersist
     public void onCreate() {
         if (createdAt == null) {
