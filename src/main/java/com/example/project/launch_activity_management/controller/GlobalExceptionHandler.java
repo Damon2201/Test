@@ -22,7 +22,9 @@ public class GlobalExceptionHandler {
             errors.put(error.getField(), error.getDefaultMessage());
         });
 
-        return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(errors);
     }
 
     // To Handle custom illegal argument errors
@@ -32,7 +34,9 @@ public class GlobalExceptionHandler {
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getMessage());
 
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(error);
     }
 
     // To Handle custom illegal state errors
@@ -42,7 +46,9 @@ public class GlobalExceptionHandler {
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getMessage());
 
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(error);
     }
 
     // To Handle custom runtime errors
@@ -52,7 +58,9 @@ public class GlobalExceptionHandler {
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getMessage());
 
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(error);
     }
 
     // To Handle response status exceptions
@@ -60,7 +68,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleResponseStatusException(org.springframework.web.server.ResponseStatusException ex) {
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getReason() != null ? ex.getReason() : ex.getMessage());
-        return new ResponseEntity<>(error, ex.getStatusCode());
+        return ResponseEntity.status(ex.getStatusCode())
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(error);
     }
 
     // To Handle rate limit exceeded errors
@@ -69,7 +79,9 @@ public class GlobalExceptionHandler {
         io.sentry.Sentry.captureMessage("Security Alert: Rate limit exceeded - " + ex.getMessage());
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.TOO_MANY_REQUESTS);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(error);
     }
 
     // To Handle unexpected errors
@@ -79,6 +91,8 @@ public class GlobalExceptionHandler {
         Map<String, String> error = new HashMap<>();
         error.put("message", ex.getMessage());
 
-        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(error);
     }
 }
