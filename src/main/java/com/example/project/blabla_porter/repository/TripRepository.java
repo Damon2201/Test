@@ -16,4 +16,9 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("select t from Trip t where t.id = :id")
     java.util.Optional<Trip> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @jakarta.transaction.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE Trip t SET t.travelMode = 'DRIVING' WHERE t.travelMode IS NULL")
+    void updateNullTravelModesToDriving();
 }

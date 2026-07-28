@@ -846,7 +846,10 @@ function renderKycRequiredScreen(kycStatus) {
     `;
 }
 
+
+
 function renderPublishTripForm() {
+    const isPassenger = currentUser.travelMode === 'PASSENGER';
     return `
         <div class="route-card">
             <h2 style="font-size:20px; font-weight:800; margin-bottom:18px;">📍 Publish Inter-City Route</h2>
@@ -862,13 +865,37 @@ function renderPublishTripForm() {
                     <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                 </div>
                 
-                ${currentUser.travelMode === 'PASSENGER' ? `
+                ${isPassenger ? `
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">Travel Date & Time</label>
+                    <input type="datetime-local" id="pub-departure-time" class="form-control" style="padding-left:16px;" required />
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">Travel Mode</label>
+                    <select id="pub-travel-mode" class="form-control" style="padding-left:16px;" required>
+                        <option value="FLIGHT">✈️ Flight</option>
+                        <option value="TRAIN">🚄 Train</option>
+                        <option value="BUS">🚌 Bus</option>
+                    </select>
+                </div>
                 <div class="form-group" style="margin-bottom:14px;">
                     <label class="form-label">Travel Ticket / PNR Number (Mandatory for Passenger Mode)</label>
                     <input type="text" id="pub-pnr" class="form-control" style="padding-left:16px;" placeholder="e.g. PNR-987654" required />
+                    <div id="pnr-preview-card" style="margin-top: 10px; padding: 12px; background: rgba(16, 185, 129, 0.08); border: 1px dashed var(--accent-green); border-radius: 8px; display: none; align-items: center; gap: 10px;">
+                        <span style="font-size: 18px;">✅</span>
+                        <div>
+                            <div style="font-weight: 800; color: var(--accent-green); font-size: 12px;">Ticket number provided</div>
+                            <div style="font-size: 11px; color: var(--text-body);">
+                                Mode: <b id="pnr-preview-mode">Flight</b> | PNR: <span id="pnr-preview-pnr" style="font-family: monospace; font-weight: 700;"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                ` : ''}
-
+                <div class="form-group" style="margin-bottom:20px;">
+                    <label class="form-label">Bag space you can spare (kg)</label>
+                    <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="5.0" min="0.1" max="10" step="0.1" required />
+                </div>
+                ` : `
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
                     <div class="form-group">
                         <label class="form-label">Trunk Space (kg)</label>
@@ -879,6 +906,7 @@ function renderPublishTripForm() {
                         <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" value="3" required />
                     </div>
                 </div>
+                `}
                 <button type="submit" class="btn-search" style="width:100%;">Publish Route</button>
             </form>
         </div>
@@ -891,11 +919,12 @@ function renderCaptainParcelPortal() {
         return renderKycRequiredScreen(kycStatus);
     }
 
+    const isPassenger = currentUser.travelMode === 'PASSENGER';
     return `
         <div class="hero-card">
             <div class="hero-header">
-                <div class="hero-subtitle">📦 Captain Inter-City Freight Dashboard</div>
-                <h1 class="hero-title">Manage Cargo Bookings & Handover</h1>
+                <div class="hero-subtitle">📦 ${isPassenger ? 'Passenger Courier Dashboard' : 'Captain Inter-City Freight Dashboard'}</div>
+                <h1 class="hero-title">${isPassenger ? 'Carry parcels on your journey' : 'Manage Cargo Bookings & Handover'}</h1>
             </div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom:40px;">
@@ -1064,6 +1093,7 @@ async function fetchTripsForCaptainDashboard() {
             captainTrips.forEach(t => {
                 const card = document.createElement('div');
                 card.className = 'route-card';
+                const isPassengerTrip = t.travelMode && t.travelMode !== 'DRIVING';
                 card.innerHTML = `
                     <div class="card-top">
                         <div>
@@ -1074,9 +1104,22 @@ async function fetchTripsForCaptainDashboard() {
                     </div>
                     <div style="font-size:12px; color:var(--text-body); margin:12px 0;">
                         <div><b>Departure:</b> ${new Date(t.departureTime).toLocaleString()}</div>
+                        ${isPassengerTrip ? `
+                        <div><b>Bag Capacity:</b> ${t.availableCapacityKg} kg Remaining</div>
+                        <div style="margin-top: 10px; padding: 10px; background: rgba(16, 185, 129, 0.08); border: 1px dashed var(--accent-green); border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 16px;">🎫</span>
+                            <div>
+                                <div style="font-weight: 800; color: var(--accent-green); font-size: 12px;">Ticket number provided</div>
+                                <div style="font-size: 11px; color: var(--text-body);">
+                                    Mode: <b>${escapeHtml(t.travelMode)}</b> | PNR: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(t.ticketOrPnrNumber)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        ` : `
                         <div><b>Trunk Capacity:</b> ${t.availableCapacityKg} kg Remaining</div>
                         <div><b>Passenger Seats:</b> ${t.availableSeats} Remaining</div>
                         ${t.ticketOrPnrNumber ? `<div><b>PNR / Ticket:</b> <span style="font-family:monospace; font-weight:700; color:var(--porter-teal);">${escapeHtml(t.ticketOrPnrNumber)}</span></div>` : ''}
+                        `}
                     </div>
                 `;
                 container.appendChild(card);
@@ -2419,17 +2462,25 @@ function bindPostRenderListeners() {
     if (publishForm) {
         publishForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const isPassenger = currentUser.travelMode === 'PASSENGER';
+            const departureTimeInput = document.getElementById('pub-departure-time');
+            
             const payload = {
                 travelerId: currentUser.id,
                 source: document.getElementById('pub-origin').value,
                 destination: document.getElementById('pub-dest').value,
-                departureTime: new Date(Date.now() + 86400000).toISOString(), // 24 hrs from now
+                departureTime: isPassenger && departureTimeInput && departureTimeInput.value
+                    ? new Date(departureTimeInput.value).toISOString()
+                    : new Date(Date.now() + 86400000).toISOString(), // 24 hrs from now
                 availableCapacityKg: parseFloat(document.getElementById('pub-kg').value),
-                availableSeats: parseInt(document.getElementById('pub-seats').value)
+                availableSeats: document.getElementById('pub-seats') ? parseInt(document.getElementById('pub-seats').value) : 0
             };
-            if (currentUser.travelMode === 'PASSENGER') {
+            if (isPassenger) {
                 const pnrEl = document.getElementById('pub-pnr');
                 payload.ticketOrPnrNumber = pnrEl ? pnrEl.value.trim() : '';
+                
+                const travelModeEl = document.getElementById('pub-travel-mode');
+                payload.travelMode = travelModeEl ? travelModeEl.value : 'FLIGHT';
             }
 
             try {
@@ -2451,6 +2502,31 @@ function bindPostRenderListeners() {
         });
         setupSimpleAutocomplete('pub-origin', 'pub-origin-suggestions');
         setupSimpleAutocomplete('pub-dest', 'pub-dest-suggestions');
+
+        // Dynamic PNR preview card listeners
+        const pnrInput = document.getElementById('pub-pnr');
+        const pnrPreview = document.getElementById('pnr-preview-card');
+        const pnrPreviewMode = document.getElementById('pnr-preview-mode');
+        const pnrPreviewPnr = document.getElementById('pnr-preview-pnr');
+        const travelModeSelect = document.getElementById('pub-travel-mode');
+
+        if (pnrInput && pnrPreview) {
+            const updatePreview = () => {
+                const pnrVal = pnrInput.value.trim();
+                const modeVal = travelModeSelect ? travelModeSelect.value : 'FLIGHT';
+                if (pnrVal) {
+                    pnrPreview.style.display = 'flex';
+                    pnrPreviewPnr.textContent = pnrVal;
+                    pnrPreviewMode.textContent = modeVal.charAt(0).toUpperCase() + modeVal.slice(1).toLowerCase();
+                } else {
+                    pnrPreview.style.display = 'none';
+                }
+            };
+            pnrInput.addEventListener('input', updatePreview);
+            if (travelModeSelect) {
+                travelModeSelect.addEventListener('change', updatePreview);
+            }
+        }
     }
 
     // Captain GPS Broadcast Listener
@@ -2602,14 +2678,14 @@ async function fetchTripsForSender() {
             
             const driverName = getUserName(trip.travelerId);
             const avatarChar = driverName.charAt(0).toUpperCase();
-            
+            const isPassengerTrip = trip.travelMode && trip.travelMode !== 'DRIVING';
             card.innerHTML = `
                 <div class="card-top">
                     <div class="driver-profile">
                         <div class="driver-avatar">${escapeHtml(avatarChar)}</div>
                         <div class="driver-info">
                             <span class="driver-name">${escapeHtml(driverName)}</span>
-                            <span class="driver-meta">⭐ 5.0 Rating • Verified Driver</span>
+                            <span class="driver-meta">⭐ 5.0 Rating • ${isPassengerTrip ? 'Passenger Courier' : 'Verified Driver'}</span>
                         </div>
                     </div>
                     <span class="verified-badge">${escapeHtml(trip.status)}</span>
@@ -2620,11 +2696,31 @@ async function fetchTripsForSender() {
                         <span class="duration-tag">➔ ~6 Hrs ➔</span>
                         <span class="city-label">${escapeHtml(trip.destination)}</span>
                     </div>
+                    ${isPassengerTrip ? `
+                    <div style="font-size:12px; color:var(--text-body); margin-top:8px; text-align:center;">
+                        📅 <b>Departure:</b> ${new Date(trip.departureTime).toLocaleString()}
+                    </div>
+                    ` : ''}
                 </div>
                 <div class="capacity-row">
+                    ${isPassengerTrip ? `
+                    <div class="capacity-chip">🎒 Bag Space: <b>${trip.availableCapacityKg} kg</b></div>
+                    ` : `
                     <div class="capacity-chip">🎒 Trunk Space: <b>${trip.availableCapacityKg} kg</b></div>
                     <div class="capacity-chip">💺 Seats: <b>${trip.availableSeats} Left</b></div>
+                    `}
                 </div>
+                ${isPassengerTrip && trip.ticketOrPnrNumber ? `
+                <div style="margin: 12px 0 0 0; padding: 12px; background: rgba(16, 185, 129, 0.08); border: 1px dashed var(--accent-green); border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 20px;">🎫</span>
+                    <div>
+                        <div style="font-weight: 800; color: var(--accent-green); font-size: 13px;">Ticket number provided</div>
+                        <div style="font-size: 12px; color: var(--text-body);">
+                            Mode: <b>${escapeHtml(trip.travelMode)}</b> | PNR: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(trip.ticketOrPnrNumber)}</span>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
                 <div class="card-footer">
                     <div class="price-container">
                         <span class="price-label">Fare Rate</span>

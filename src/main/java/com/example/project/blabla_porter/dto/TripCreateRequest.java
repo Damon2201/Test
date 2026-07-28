@@ -32,4 +32,6 @@ public class TripCreateRequest {
     private Integer availableSeats;
 
     private String ticketOrPnrNumber;
+
+    private String travelMode;
 }

@@ -48,9 +48,10 @@ public class TripService {
                 .departureTime(req.getDepartureTime())
                 .estimatedArrivalTime(req.getEstimatedArrivalTime())
                 .availableCapacityKg(req.getAvailableCapacityKg())
-                .availableSeats(req.getAvailableSeats())
+                .availableSeats("PASSENGER".equalsIgnoreCase(traveler.getTravelMode()) ? 0 : (req.getAvailableSeats() != null ? req.getAvailableSeats() : 0))
                 .status(Trip.TripStatus.PLANNED)
                 .ticketOrPnrNumber(req.getTicketOrPnrNumber())
+                .travelMode(req.getTravelMode() != null ? req.getTravelMode() : ("PASSENGER".equalsIgnoreCase(traveler.getTravelMode()) ? "FLIGHT" : "DRIVING"))
                 .build();
 
         Trip savedTrip = tripRepository.save(trip);

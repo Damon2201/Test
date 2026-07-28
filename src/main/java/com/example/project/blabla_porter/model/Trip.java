@@ -59,6 +59,12 @@ public class Trip {
 
     private String ticketOrPnrNumber;
 
+    private String travelMode;
+
+    public String getTravelMode() {
+        return travelMode == null ? "DRIVING" : travelMode;
+    }
+
     @PrePersist
     public void onCreate() {
         if (createdAt == null) {
@@ -69,3 +75,4 @@ public class Trip {
         }
     }
 }
+

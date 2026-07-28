@@ -11,11 +11,16 @@ public class DatabaseMigrationRunner implements CommandLineRunner {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private com.example.project.blabla_porter.repository.TripRepository tripRepository;
+
     @Override
     public void run(String... args) {
         try {
             userRepository.updateNullTravelModesToDriving();
             System.out.println(">>> DatabaseMigrationRunner: Successfully set all existing NULL travelModes to DRIVING");
+            tripRepository.updateNullTravelModesToDriving();
+            System.out.println(">>> DatabaseMigrationRunner: Successfully set all existing NULL trip travelModes to DRIVING");
         } catch (Exception e) {
             System.err.println(">>> DatabaseMigrationRunner failed to run: " + e.getMessage());
         }
