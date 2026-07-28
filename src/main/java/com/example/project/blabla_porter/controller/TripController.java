@@ -38,9 +38,26 @@ public class TripController {
         return response;
     }
 
+    @Autowired
+    private com.example.project.blabla_porter.service.UserService userService;
+
     @PostMapping
     @RequireRole(User.UserRole.TRAVELER)
-    public Trip createTrip(@Valid @RequestBody TripCreateRequest request) {
+    public Trip createTrip(@Valid @RequestBody TripCreateRequest request, jakarta.servlet.http.HttpServletRequest httpServletRequest) {
+        Long authenticatedUserId = (Long) httpServletRequest.getAttribute("authenticatedUserId");
+        User user = userService.getById(authenticatedUserId);
+        if ("PASSENGER".equalsIgnoreCase(user.getTravelMode())) {
+            if (request.getAvailableSeats() != null && request.getAvailableSeats() > 0) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.FORBIDDEN,
+                        "Passenger couriers cannot offer passenger seats (Carpool)!");
+            }
+            if (request.getTravelMode() == null || "DRIVING".equalsIgnoreCase(request.getTravelMode())) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.FORBIDDEN,
+                        "Passenger couriers cannot publish driving routes!");
+            }
+        }
         return tripService.createTrip(request);
     }
 

@@ -1572,14 +1572,6 @@ function renderActiveModal() {
                                 </select>
                             </div>
 
-                            <div class="form-group" id="reg-travel-mode-container" style="display:none; margin-bottom:14px;">
-                                <label class="form-label">Travel Mode</label>
-                                <select id="reg-travel-mode" class="form-control" style="padding-left:16px;" onchange="toggleKycTravelModeFields(this.value, 'reg')" required>
-                                    <option value="DRIVING">🚗 Driving Mode (PAN, DL, RC required)</option>
-                                    <option value="PASSENGER">🎫 Passenger Mode (Ticket/PNR required)</option>
-                                </select>
-                            </div>
-
                             <div id="kyc-fields-container" style="display:none; border:1px dashed var(--border); padding:14px; border-radius:12px; margin-bottom:14px; background:var(--bg-surface);">
                                 <div style="font-weight:700; color:var(--porter-teal); margin-bottom:10px; font-size:13px;">🪪 Mandatory Captain KYC Documents</div>
                                 <div class="form-group" style="margin-bottom:10px;">
@@ -2042,13 +2034,7 @@ function renderActiveModal() {
                     </div>
                     <form id="apply-kyc-form" onsubmit="submitApplyKycForm(event)">
                         <div style="font-weight:700; color:var(--porter-teal); margin-bottom:14px; font-size:13px;">Please upload your verification credentials:</div>
-                        <div class="form-group" style="margin-bottom:12px;">
-                            <label class="form-label">Travel Mode</label>
-                            <select id="apply-travel-mode" class="form-control" style="padding-left:16px;" onchange="toggleKycTravelModeFields(this.value, 'apply')" required>
-                                <option value="DRIVING" selected>🚗 Driving my own vehicle</option>
-                                <option value="PASSENGER">✈️ Travelling as a passenger</option>
-                            </select>
-                        </div>
+                        <input type="hidden" id="apply-travel-mode" value="DRIVING" />
                         <div class="form-group" style="margin-bottom:12px;">
                             <label class="form-label">Aadhaar Card Number</label>
                             <input type="text" id="apply-aadhaar" class="form-control" style="padding-left:16px;" value="123456789012" placeholder="12-digit Aadhaar" required />
@@ -2381,18 +2367,11 @@ function bindPostRenderListeners() {
             };
 
             if (role === 'TRAVELER') {
-                const mode = document.getElementById('reg-travel-mode').value;
-                payload.travelMode = mode;
+                payload.travelMode = 'DRIVING';
                 payload.aadhaarNumber = document.getElementById('reg-aadhaar').value;
-                if (mode === 'PASSENGER') {
-                    payload.panNumber = null;
-                    payload.drivingLicenceNumber = null;
-                    payload.rcNumber = null;
-                } else {
-                    payload.panNumber = document.getElementById('reg-pan').value;
-                    payload.drivingLicenceNumber = document.getElementById('reg-dl').value;
-                    payload.rcNumber = document.getElementById('reg-rc').value;
-                }
+                payload.panNumber = document.getElementById('reg-pan').value;
+                payload.drivingLicenceNumber = document.getElementById('reg-dl').value;
+                payload.rcNumber = document.getElementById('reg-rc').value;
             }
 
             try {
@@ -3180,22 +3159,16 @@ async function approveKycAdmin(userId) {
 // STAGE 1 Helper Functions
 window.toggleKycFields = function(role) {
     const container = document.getElementById('kyc-fields-container');
-    const travelModeContainer = document.getElementById('reg-travel-mode-container');
     if (container) {
         if (role === 'TRAVELER') {
             container.style.display = 'block';
-            if (travelModeContainer) travelModeContainer.style.display = 'block';
-            const mode = document.getElementById('reg-travel-mode').value;
-            toggleKycTravelModeFields(mode, 'reg');
+            toggleKycTravelModeFields('DRIVING', 'reg');
         } else {
             container.style.display = 'none';
-            if (travelModeContainer) travelModeContainer.style.display = 'none';
             document.getElementById('reg-aadhaar').required = false;
             document.getElementById('reg-pan').required = false;
             document.getElementById('reg-dl').required = false;
             document.getElementById('reg-rc').required = false;
-            const pnrInput = document.getElementById('reg-pnr');
-            if (pnrInput) pnrInput.required = false;
         }
     }
 };
@@ -3217,21 +3190,13 @@ window.sendRegistrationOtpBtn = async function() {
     }
 
     if (role === 'TRAVELER') {
-        const mode = document.getElementById('reg-travel-mode').value;
         const aadhaar = document.getElementById('reg-aadhaar').value.trim();
-        if (mode === 'PASSENGER') {
-            if (!aadhaar) {
-                showToast('Aadhaar number is mandatory for Passenger Captain registration!', 'error');
-                return;
-            }
-        } else {
-            const pan = document.getElementById('reg-pan').value.trim();
-            const dl = document.getElementById('reg-dl').value.trim();
-            const rc = document.getElementById('reg-rc').value.trim();
-            if (!aadhaar || !pan || !dl || !rc) {
-                showToast('Aadhaar, PAN, DL, and RC are mandatory for Driver Captain registration!', 'error');
-                return;
-            }
+        const pan = document.getElementById('reg-pan').value.trim();
+        const dl = document.getElementById('reg-dl').value.trim();
+        const rc = document.getElementById('reg-rc').value.trim();
+        if (!aadhaar || !pan || !dl || !rc) {
+            showToast('Aadhaar, PAN, DL, and RC are mandatory for Driver Captain registration!', 'error');
+            return;
         }
     }
 
@@ -5660,7 +5625,7 @@ function renderCustomerProfile() {
                 </p>
             </div>
         `;
-    } else if (currentUser.kycStatus === 'APPROVED' && !hasTravelerCap) {
+    } else if (currentUser.kycStatus === 'APPROVED' && currentUser.role === 'TRAVELER' && !hasTravelerCap) {
         captainSecHtml = `
             <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px; border-color: var(--warning); background: rgba(245, 158, 11, 0.05);">
                 <h3 style="font-size:15px; font-weight:800; color:var(--warning); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
@@ -5686,21 +5651,50 @@ function renderCustomerProfile() {
             </div>
         `;
     } else {
+        const isNotTraveler = currentUser.role !== 'TRAVELER';
+        const isNotPassenger = currentUser.travelMode !== 'PASSENGER';
+
         captainSecHtml = `
             <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px;">
                 <h3 style="font-size:15px; font-weight:800; color:var(--text-white); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-                    🚀 Earn as a Captain
+                    🚀 Earn as a Captain (Driving)
                 </h3>
                 <p style="color:var(--text-body); font-size:12px; margin-bottom:16px; line-height:1.5;">
-                    Interested in publishing trips, carrying packages, or driving passengers? Apply to become a trusted Captain.
+                    Interested in publishing driving trips, carrying packages, or driving passengers? Apply with your Driving KYC documents.
                 </p>
-                ${currentUser.kycStatus === 'REJECTED' ? `
-                    <div style="color:var(--danger); font-size:11px; margin-bottom:12px; font-weight:700;">⚠️ Previous application was rejected. Please review details and apply again.</div>
+                ${currentUser.kycStatus === 'REJECTED' && currentUser.travelMode === 'DRIVING' ? `
+                    <div style="color:var(--danger); font-size:11px; margin-bottom:12px; font-weight:700;">⚠️ Previous Driving application was rejected. Please review details and apply again.</div>
                 ` : ''}
                 <button class="btn-search" style="width:100%; border:none; background: var(--porter-gradient);" onclick="activeModal = 'apply-kyc'; renderApp();">
-                    🔑 Submit KYC to Unlock Captain Status
+                    🔑 Submit Driving KYC
                 </button>
             </div>
+
+            ${isNotTraveler && isNotPassenger ? `
+            <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px; border-color: rgba(6, 182, 212, 0.3);">
+                <h3 style="font-size:15px; font-weight:800; color:var(--porter-teal); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                    🎫 Become a Passenger Courier
+                </h3>
+                <p style="color:var(--text-body); font-size:12px; margin-bottom:16px; line-height:1.5;">
+                    Traveling by flight, train, or bus? Register as a passenger courier to carry parcels on your journey.
+                </p>
+                ${currentUser.kycStatus === 'REJECTED' && currentUser.travelMode === 'PASSENGER' ? `
+                    <div style="color:var(--danger); font-size:11px; margin-bottom:12px; font-weight:700;">⚠️ Previous Passenger application was rejected. Please review details and apply again.</div>
+                ` : ''}
+                <div id="passenger-courier-form-container" style="display:none; border-top:1px dashed var(--border); padding-top:16px; margin-top:12px;">
+                    <form id="passenger-kyc-form" onsubmit="submitPassengerKyc(event)">
+                        <div class="form-group" style="margin-bottom:12px;">
+                            <label class="form-label">Aadhaar Card Number</label>
+                            <input type="text" id="passenger-aadhaar" class="form-control" style="padding-left:16px;" placeholder="12-digit Aadhaar" required />
+                        </div>
+                        <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient);">Submit Passenger Courier KYC</button>
+                    </form>
+                </div>
+                <button id="btn-toggle-passenger-courier" class="btn-search" style="width:100%; border:none; background: var(--porter-gradient);" onclick="document.getElementById('passenger-courier-form-container').style.display='block'; this.style.display='none';">
+                    ⚡ Apply as Passenger Courier
+                </button>
+            </div>
+            ` : ''}
         `;
     }
 
@@ -5844,6 +5838,44 @@ window.submitApplyKycForm = async function(event) {
         }
     } catch (err) {
         console.error("KYC submission error", err);
+        showToast("Network error submitting KYC.", "error");
+    }
+};
+
+window.submitPassengerKyc = async function(event) {
+    event.preventDefault();
+    const aadhaar = document.getElementById('passenger-aadhaar').value.trim();
+    if (aadhaar.length !== 12 || isNaN(aadhaar)) {
+        showToast("Aadhaar number must be exactly 12 digits!", "error");
+        return;
+    }
+    try {
+        const res = await fetch(`${API_BASE}/kyc/submit`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                userId: currentUser.id,
+                aadhaarNumber: aadhaar,
+                panNumber: null,
+                drivingLicenceNumber: null,
+                rcNumber: null,
+                travelMode: 'PASSENGER'
+            })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            currentUser.kycStatus = 'PENDING_APPROVAL';
+            currentUser.role = 'TRAVELER';
+            currentUser.travelMode = 'PASSENGER';
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            showToast("Passenger Courier KYC submitted! Awaiting Admin approval.", "success");
+            renderApp();
+        } else {
+            const err = await res.json();
+            showToast("Submission failed: " + (err.error || "Unknown error"), "error");
+        }
+    } catch (err) {
+        console.error("Passenger KYC submission error", err);
         showToast("Network error submitting KYC.", "error");
     }
 };

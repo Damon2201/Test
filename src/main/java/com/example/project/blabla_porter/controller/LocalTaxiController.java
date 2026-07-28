@@ -23,12 +23,21 @@ public class LocalTaxiController {
     @Autowired
     private LocalTaxiService localTaxiService;
 
+    @Autowired
+    private com.example.project.blabla_porter.service.UserService userService;
+
     @PostMapping("/captain/status")
     @RequireRole(User.UserRole.TRAVELER)
     public LocalCaptainStatus updateCaptainStatus(@RequestParam Long captainId,
                                                   @RequestParam boolean available,
                                                   @RequestParam Double latitude,
                                                   @RequestParam Double longitude) {
+        User user = userService.getById(captainId);
+        if ("PASSENGER".equalsIgnoreCase(user.getTravelMode())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Passenger couriers cannot toggle local taxi availability!");
+        }
         return localTaxiService.toggleAvailability(captainId, available, latitude, longitude);
     }
 
@@ -79,6 +88,12 @@ public class LocalTaxiController {
     public LocalTaxiBooking updateStatus(@PathVariable Long id,
                                          @RequestParam Long userId,
                                          @RequestParam LocalTaxiBookingStatus status) {
+        User user = userService.getById(userId);
+        if (User.UserRole.TRAVELER.equals(user.getRole()) && "PASSENGER".equalsIgnoreCase(user.getTravelMode())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Passenger couriers cannot accept or update local taxi status!");
+        }
         return localTaxiService.updateBookingStatus(id, userId, status);
     }
 

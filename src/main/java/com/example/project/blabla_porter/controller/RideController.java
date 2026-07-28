@@ -19,6 +19,9 @@ public class RideController {
     @Autowired
     private RideService rideService;
 
+    @Autowired
+    private com.example.project.blabla_porter.service.UserService userService;
+
     @PostMapping("/request")
     @RequireRole(User.UserRole.RIDER)
     public RideRequest requestRide(@Valid @RequestBody RideBookingRequest request) {
@@ -28,6 +31,12 @@ public class RideController {
     @PutMapping("/{id}/accept")
     @RequireRole(User.UserRole.TRAVELER)
     public RideRequest acceptRide(@PathVariable Long id, @RequestParam Long travelerId) {
+        User traveler = userService.getById(travelerId);
+        if ("PASSENGER".equalsIgnoreCase(traveler.getTravelMode())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Passenger couriers cannot accept carpool ride bookings!");
+        }
         return rideService.acceptRide(id, travelerId);
     }
 
