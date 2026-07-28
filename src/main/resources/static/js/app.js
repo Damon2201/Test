@@ -712,6 +712,23 @@ function renderSenderPortal() {
         return renderCustomerProfile();
     }
 
+    const isKycApprovedDrift = currentUser && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
+    const driftWarningHtml = isKycApprovedDrift ? `
+        <div style="background: rgba(245, 158, 11, 0.08); border: 1.5px solid var(--warning); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <div>
+                <h4 style="margin: 0; color: var(--warning); font-size: 13px; font-weight: 800; display:flex; align-items:center; gap:6px;">
+                    <span>🎉</span> KYC Approved — Re-login Required
+                </h4>
+                <p style="margin: 4px 0 0 0; color: var(--text-body); font-size: 11px; line-height: 1.45; opacity: 0.9;">
+                    Congratulations! Your Captain KYC is approved. Please sign out and sign in again to activate Captain mode and unlock the Captain dashboard.
+                </p>
+            </div>
+            <button class="btn-search" style="margin: 0; padding: 8px 12px; background: var(--warning); color: var(--text-black); border: none; border-radius: 6px; font-size: 11px; font-weight: 800; width: 100%; cursor: pointer;" onclick="logout()">
+                🔑 Sign Out & Reactivate Captain Mode
+            </button>
+        </div>
+    ` : '';
+
     return `
         <div class="map-first-layout">
             <div class="map-first-container">
@@ -722,6 +739,7 @@ function renderSenderPortal() {
             </div>
             <div class="map-first-panel">
                 <div class="bottom-sheet-drag-handle"></div>
+                ${driftWarningHtml}
                 <div style="margin-bottom:20px;">
                     <h1 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:4px;">📦 Inter-City Freight</h1>
                     <p style="font-size:12px; color:var(--text-body);">Search active Captain routes or post an auto-matching parcel request.</p>
@@ -1223,6 +1241,23 @@ function renderRiderPortal() {
         return renderCustomerProfile();
     }
 
+    const isKycApprovedDrift = currentUser && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
+    const driftWarningHtml = isKycApprovedDrift ? `
+        <div style="background: rgba(245, 158, 11, 0.08); border: 1.5px solid var(--warning); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <div>
+                <h4 style="margin: 0; color: var(--warning); font-size: 13px; font-weight: 800; display:flex; align-items:center; gap:6px;">
+                    <span>🎉</span> KYC Approved — Re-login Required
+                </h4>
+                <p style="margin: 4px 0 0 0; color: var(--text-body); font-size: 11px; line-height: 1.45; opacity: 0.9;">
+                    Congratulations! Your Captain KYC is approved. Please sign out and sign in again to activate Captain mode and unlock the Captain dashboard.
+                </p>
+            </div>
+            <button class="btn-search" style="margin: 0; padding: 8px 12px; background: var(--warning); color: var(--text-black); border: none; border-radius: 6px; font-size: 11px; font-weight: 800; width: 100%; cursor: pointer;" onclick="logout()">
+                🔑 Sign Out & Reactivate Captain Mode
+            </button>
+        </div>
+    ` : '';
+
     if (currentCustomerTab === 'taxi') {
         return `
             <div class="map-first-layout">
@@ -1234,6 +1269,7 @@ function renderRiderPortal() {
                 </div>
                 <div class="map-first-panel">
                     <div class="bottom-sheet-drag-handle"></div>
+                    ${driftWarningHtml}
                     <div style="margin-bottom:20px;">
                         <h1 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:4px;">🚖 Same-City Local Taxi</h1>
                         <p style="font-size:12px; color:var(--text-body);">Instantly match with nearby drivers inside your city.</p>
@@ -1319,6 +1355,7 @@ function renderRiderPortal() {
             </div>
             <div class="map-first-panel">
                 <div class="bottom-sheet-drag-handle"></div>
+                ${driftWarningHtml}
                 <div style="margin-bottom:20px;">
                     <h1 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:4px;">🚗 Inter-City Carpool</h1>
                     <p style="font-size:12px; color:var(--text-body);">Find available co-ride seats shared by trusted inter-city drivers.</p>
