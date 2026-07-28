@@ -42,4 +42,11 @@ public class KycController {
         Long adminId = (Long) request.getAttribute("authenticatedUserId");
         return userService.reviewKyc(userId, approve, adminId);
     }
+
+    @PostMapping("/rider/enable")
+    @RequireRole({User.UserRole.SENDER, User.UserRole.TRAVELER})
+    public com.example.project.blabla_porter.dto.AuthResponse enableRiderRole(jakarta.servlet.http.HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("authenticatedUserId");
+        return userService.enableRiderRole(userId);
+    }
 }

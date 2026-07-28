@@ -659,12 +659,14 @@ function renderApp() {
     let navBarHtml = '';
     if (currentUser && currentUser.role !== 'ADMIN') {
         const hasTravelerCap = currentUser.capabilities && currentUser.capabilities.includes('TRAVELER');
+        const hasRiderAccess = currentUser.capabilities && (currentUser.capabilities.includes('RIDER') || currentUser.capabilities.includes('TRAVELER'));
         navBarHtml = `
             <nav class="bottom-nav-bar">
                 <button class="bottom-nav-item ${currentCustomerTab === 'parcel' ? 'active' : ''}" onclick="switchCustomerTab('parcel')">
                     <span class="nav-icon">📦</span>
                     <span>Parcel</span>
                 </button>
+                ${hasRiderAccess ? `
                 <button class="bottom-nav-item ${currentCustomerTab === 'carpool' ? 'active' : ''}" onclick="switchCustomerTab('carpool')">
                     <span class="nav-icon">🚗</span>
                     <span>Carpool</span>
@@ -673,6 +675,7 @@ function renderApp() {
                     <span class="nav-icon">🚖</span>
                     <span>Local Taxi</span>
                 </button>
+                ` : ''}
                 <button class="bottom-nav-item ${currentCustomerTab === 'profile' ? 'active' : ''}" onclick="switchCustomerTab('profile')">
                     <span class="nav-icon">👤</span>
                     <span>Profile</span>
@@ -5695,6 +5698,20 @@ function renderCustomerProfile() {
                 </button>
             </div>
             ` : ''}
+
+            ${isNotTraveler && !currentUser.capabilities.includes('RIDER') ? `
+            <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px; border-color: rgba(99, 102, 241, 0.3);">
+                <h3 style="font-size:15px; font-weight:800; color:var(--primary); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                    🚗 Enable Carpool & Taxi Rides
+                </h3>
+                <p style="color:var(--text-body); font-size:12px; margin-bottom:16px; line-height:1.5;">
+                    Want to search and book passenger seats (Carpool) or book quick point-to-point taxi rides? Turn this on to enable booking capabilities instantly.
+                </p>
+                <button class="btn-search" style="width:100%; border:none; background: var(--porter-gradient);" onclick="enableRiderRole()">
+                    ⚡ Enable Booking Tabs
+                </button>
+            </div>
+            ` : ''}
         `;
     }
 
@@ -5980,6 +5997,28 @@ window.submitTripRating = async function(event, targetId, rateeId, isParcel) {
     } catch (err) {
         console.error(err);
         showToast("Error submitting rating.", "error");
+    }
+};
+
+window.enableRiderRole = async function() {
+    try {
+        const res = await fetch(`${API_BASE}/kyc/rider/enable`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            const data = await res.json();
+            currentUser = data;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            showToast("Carpool & Taxi booking enabled successfully!", "success");
+            renderApp();
+        } else {
+            const err = await res.json();
+            showToast("Failed to enable booking tabs: " + (err.message || err.error || "Unknown error"), "error");
+        }
+    } catch (err) {
+        console.error("Error enabling rider role", err);
+        showToast("Network error enabling booking tabs.", "error");
     }
 };
 

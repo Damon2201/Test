@@ -68,9 +68,16 @@ public class MultiCapabilityIntegrationTest {
         System.out.println("  Alice's extracted capabilities: " + aliceJwtCaps);
         System.out.println("  Alice's AuthResponse capabilities: " + aliceAuth.getCapabilities());
 
-        // Assert Alice has SENDER + RIDER capabilities
+        // Assert Alice has SENDER capability initially but not RIDER
         assertTrue(aliceJwtCaps.contains(User.UserRole.SENDER), "Alice should have SENDER capability");
-        assertTrue(aliceJwtCaps.contains(User.UserRole.RIDER), "Alice should have RIDER capability");
+        assertFalse(aliceJwtCaps.contains(User.UserRole.RIDER), "Alice should NOT have RIDER capability initially");
+
+        // Enable RIDER capability
+        aliceAuth = userService.enableRiderRole(aliceAuth.getId());
+        aliceClaims = jwtService.validateTokenAndGetClaims(aliceAuth.getToken());
+        aliceJwtCaps = jwtService.extractCapabilities(aliceAuth.getToken());
+
+        assertTrue(aliceJwtCaps.contains(User.UserRole.RIDER), "Alice should have RIDER capability after enabling");
         assertFalse(aliceJwtCaps.contains(User.UserRole.TRAVELER), "Alice should NOT have TRAVELER capability");
 
         // Seed a captain so taxi booking can succeed
@@ -338,19 +345,22 @@ public class MultiCapabilityIntegrationTest {
         userRepository.save(User.builder()
                 .fullName("Alice Sender").mobileNumber("9876543210")
                 .role(User.UserRole.SENDER).passwordHash(hashedPw)
-                .kycStatus(User.KycStatus.NOT_SUBMITTED).build());
+                .kycStatus(User.KycStatus.NOT_SUBMITTED)
+                .riderEnabled(true).build());
 
         // Seed Bob Captain (APPROVED)
         userRepository.save(User.builder()
                 .fullName("Bob Captain").mobileNumber("9876543211")
                 .role(User.UserRole.TRAVELER).passwordHash(hashedPw)
-                .kycStatus(User.KycStatus.APPROVED).build());
+                .kycStatus(User.KycStatus.APPROVED)
+                .riderEnabled(true).build());
 
         // Seed Charlie Rider
         userRepository.save(User.builder()
                 .fullName("Charlie Rider").mobileNumber("9876543212")
                 .role(User.UserRole.RIDER).passwordHash(hashedPw)
-                .kycStatus(User.KycStatus.NOT_SUBMITTED).build());
+                .kycStatus(User.KycStatus.NOT_SUBMITTED)
+                .riderEnabled(true).build());
 
         // Seed Platform Admin
         userRepository.save(User.builder()

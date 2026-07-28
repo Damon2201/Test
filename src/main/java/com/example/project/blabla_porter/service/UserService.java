@@ -325,4 +325,28 @@ public class UserService {
         // Revoke all existing sessions
         refreshTokenService.deleteByUserId(user.getId());
     }
+
+    @Transactional
+    public AuthResponse enableRiderRole(Long userId) {
+        User user = getById(userId);
+        user.setRiderEnabled(true);
+        userRepository.save(user);
+
+        String token = jwtService.generateToken(user);
+        com.example.project.blabla_porter.model.RefreshToken rt = refreshTokenService.createRefreshToken(user.getId());
+
+        return AuthResponse.builder()
+                .token(token)
+                .refreshToken(rt.getToken())
+                .id(user.getId())
+                .fullName(user.getFullName())
+                .mobileNumber(user.getMobileNumber())
+                .email(user.getEmail())
+                .role(user.getRole())
+                .capabilities(user.getCapabilities())
+                .kycStatus(user.getKycStatus())
+                .travelMode(user.getTravelMode())
+                .ticketOrPnrNumber(user.getTicketOrPnrNumber())
+                .build();
+    }
 }

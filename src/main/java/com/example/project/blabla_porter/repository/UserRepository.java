@@ -18,4 +18,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE User u SET u.travelMode = 'DRIVING' WHERE u.travelMode IS NULL")
     void updateNullTravelModesToDriving();
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE User u SET u.riderEnabled = true WHERE u.riderEnabled IS NULL")
+    void updateNullRiderEnabledToTrue();
 }

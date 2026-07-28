@@ -176,7 +176,7 @@ public class RealAuthenticationTest {
     @Test
     @DisplayName("Verify multi-capability roles and capability extraction in JWT")
     void testMultiCapabilitySecurity() {
-        // 1. Sender gets SENDER + RIDER
+        // 1. Sender gets SENDER by default (no RIDER)
         RegisterRequest senderReq = new RegisterRequest();
         senderReq.setFullName("Stefan Sender");
         senderReq.setMobileNumber("9990008881");
@@ -186,9 +186,14 @@ public class RealAuthenticationTest {
         
         java.util.Set<User.UserRole> senderCaps = sender.getCapabilities();
         assertTrue(senderCaps.contains(User.UserRole.SENDER));
-        assertTrue(senderCaps.contains(User.UserRole.RIDER));
+        assertFalse(senderCaps.contains(User.UserRole.RIDER));
         assertFalse(senderCaps.contains(User.UserRole.TRAVELER));
         assertFalse(senderCaps.contains(User.UserRole.ADMIN));
+
+        // Enable RIDER role for Sender
+        userService.enableRiderRole(sender.getId());
+        User updatedSender = userService.getById(sender.getId());
+        assertTrue(updatedSender.getCapabilities().contains(User.UserRole.RIDER));
 
         AuthResponse loginResp = userService.login(new LoginRequest("9990008881", "Password123"));
         java.util.Set<User.UserRole> jwtCaps = jwtService.extractCapabilities(loginResp.getToken());

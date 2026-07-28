@@ -404,4 +404,33 @@ public class BlaBlaPorterPhase1Tests {
         // 7. Verify status is now APPROVED
         assertEquals(User.KycStatus.APPROVED, afterApproval.getKycStatus(), "KYC status must be APPROVED only after admin approval");
     }
+
+    @Test
+    @DisplayName("Scenario 15: Decoupled RIDER capability registration and manual opt-in flow")
+    void test15_riderDecouplingAndOptInFlow() {
+        String freshMobile = "9111111112";
+
+        // 1. Register a new SENDER
+        RegisterRequest regReq = new RegisterRequest();
+        regReq.setFullName("Sender OptIn");
+        regReq.setMobileNumber(freshMobile);
+        regReq.setRole(User.UserRole.SENDER);
+        User user = userService.register(regReq);
+
+        // 2. Verify only SENDER capability is present (no RIDER capability)
+        java.util.Set<User.UserRole> initialCaps = user.getCapabilities();
+        assertTrue(initialCaps.contains(User.UserRole.SENDER), "Must have SENDER capability");
+        assertFalse(initialCaps.contains(User.UserRole.RIDER), "Must NOT have RIDER capability by default");
+
+        // 3. Enable RIDER role via service
+        com.example.project.blabla_porter.dto.AuthResponse response = userService.enableRiderRole(user.getId());
+
+        // 4. Verify updated capabilities in the response
+        assertTrue(response.getCapabilities().contains(User.UserRole.SENDER), "Must retain SENDER capability");
+        assertTrue(response.getCapabilities().contains(User.UserRole.RIDER), "Must gain RIDER capability after opting in");
+
+        // 5. Verify database matches
+        User updatedDbUser = userService.getById(user.getId());
+        assertTrue(updatedDbUser.getCapabilities().contains(User.UserRole.RIDER), "Database state must return RIDER capability");
+    }
 }

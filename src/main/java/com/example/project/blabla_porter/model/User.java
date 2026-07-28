@@ -52,6 +52,10 @@ public class User {
     @Column(nullable = false)
     private KycStatus kycStatus;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean riderEnabled = false;
+
     // KYC Document Metadata
     @Convert(converter = com.example.project.blabla_porter.config.AesAttributeConverter.class)
     private String aadhaarNumber;
@@ -81,6 +85,9 @@ public class User {
         if (kycStatus == null) {
             kycStatus = (role == UserRole.TRAVELER) ? KycStatus.NOT_SUBMITTED : KycStatus.APPROVED;
         }
+        if (riderEnabled == null) {
+            riderEnabled = false;
+        }
         if (averageRating == null) {
             averageRating = 5.0;
         }
@@ -103,7 +110,9 @@ public class User {
             return caps;
         }
         caps.add(UserRole.SENDER);
-        caps.add(UserRole.RIDER);
+        if (this.role == UserRole.RIDER || this.role == UserRole.TRAVELER || Boolean.TRUE.equals(this.riderEnabled)) {
+            caps.add(UserRole.RIDER);
+        }
         if (this.role == UserRole.TRAVELER && this.kycStatus == KycStatus.APPROVED) {
             caps.add(UserRole.TRAVELER);
         }
