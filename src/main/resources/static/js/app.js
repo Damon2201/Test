@@ -3087,9 +3087,8 @@ window.sendRegistrationOtpBtn = async function() {
         const mode = document.getElementById('reg-travel-mode').value;
         const aadhaar = document.getElementById('reg-aadhaar').value.trim();
         if (mode === 'PASSENGER') {
-            const pnr = document.getElementById('reg-pnr').value.trim();
-            if (!aadhaar || !pnr) {
-                showToast('Aadhaar number and Ticket/PNR are mandatory for Passenger Captain registration!', 'error');
+            if (!aadhaar) {
+                showToast('Aadhaar number is mandatory for Passenger Captain registration!', 'error');
                 return;
             }
         } else {
