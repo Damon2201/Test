@@ -38,7 +38,7 @@ window.fetch = async function(...args) {
         if (response.status === 401 || response.status === 403) {
             // Check if we are currently logged in. If so, automatically sign out on unauthorized error.
             if (localStorage.getItem('currentUser')) {
-                const isKycApprovedDrift = currentUser && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
+                const isKycApprovedDrift = currentUser && currentUser.role === 'TRAVELER' && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
                 localStorage.removeItem('currentUser');
                 currentUser = null;
                 if (isKycApprovedDrift) {
@@ -712,7 +712,7 @@ function renderSenderPortal() {
         return renderCustomerProfile();
     }
 
-    const isKycApprovedDrift = currentUser && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
+    const isKycApprovedDrift = currentUser && currentUser.role === 'TRAVELER' && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
     const driftWarningHtml = isKycApprovedDrift ? `
         <div style="background: rgba(245, 158, 11, 0.08); border: 1.5px solid var(--warning); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
             <div>
@@ -1284,7 +1284,7 @@ function renderRiderPortal() {
         return renderCustomerProfile();
     }
 
-    const isKycApprovedDrift = currentUser && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
+    const isKycApprovedDrift = currentUser && currentUser.role === 'TRAVELER' && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
     const driftWarningHtml = isKycApprovedDrift ? `
         <div style="background: rgba(245, 158, 11, 0.08); border: 1.5px solid var(--warning); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
             <div>

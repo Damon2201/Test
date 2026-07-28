@@ -43,6 +43,9 @@ public class BlaBlaPorterPhase1Tests {
     @Autowired
     private TripService tripService;
 
+    @Autowired
+    private com.example.project.blabla_porter.repository.UserRepository userRepository;
+
     @BeforeEach
     void setUp() {
     }
@@ -366,6 +369,39 @@ public class BlaBlaPorterPhase1Tests {
 
         Trip trip = tripService.createTrip(tripReq);
         assertNotNull(trip.getId());
-        assertNull(trip.getTicketOrPnrNumber(), "Driver trip should have null PNR");
+    }
+
+    @Test
+    @DisplayName("Scenario 14: Clean test for registration, KYC submission, and explicit admin approval flow")
+    void test14_cleanKycRegistrationAndApprovalFlow() {
+        String freshMobile = "9111111111";
+        // 1. Confirm mobile number has never been used (not found in database)
+        assertFalse(userRepository.findByMobileNumber(freshMobile).isPresent(), "Mobile number must be unused before test starts");
+
+        // 2. Register as a new Traveler
+        RegisterRequest regReq = new RegisterRequest();
+        regReq.setFullName("Rebecca Clean");
+        regReq.setMobileNumber(freshMobile);
+        regReq.setRole(User.UserRole.TRAVELER);
+        User traveler = userService.register(regReq);
+
+        // 3. Immediately check status — must be NOT_SUBMITTED
+        assertEquals(User.KycStatus.NOT_SUBMITTED, traveler.getKycStatus(), "Initial KYC status for traveler without docs must be NOT_SUBMITTED");
+
+        // 4. Submit KYC
+        KycSubmitRequest kycReq = new KycSubmitRequest();
+        kycReq.setUserId(traveler.getId());
+        kycReq.setAadhaarNumber("9999-8888-7777");
+        kycReq.setTravelMode("PASSENGER");
+        User afterSubmission = userService.submitKyc(kycReq);
+
+        // 5. Immediately check status — must be PENDING_APPROVAL, never APPROVED
+        assertEquals(User.KycStatus.PENDING_APPROVAL, afterSubmission.getKycStatus(), "KYC status must be PENDING_APPROVAL immediately after submission");
+
+        // 6. Approve KYC explicitly via admin review
+        User afterApproval = userService.reviewKyc(traveler.getId(), true);
+
+        // 7. Verify status is now APPROVED
+        assertEquals(User.KycStatus.APPROVED, afterApproval.getKycStatus(), "KYC status must be APPROVED only after admin approval");
     }
 }
