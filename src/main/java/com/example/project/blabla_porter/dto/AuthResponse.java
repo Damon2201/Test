@@ -22,4 +22,5 @@ public class AuthResponse {
     private User.KycStatus kycStatus;
     private String travelMode;
     private String ticketOrPnrNumber;
+    private Boolean passengerApproved;
 }

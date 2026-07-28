@@ -23,6 +23,10 @@ public class DatabaseMigrationRunner implements CommandLineRunner {
             System.out.println(">>> DatabaseMigrationRunner: Successfully set all existing NULL trip travelModes to DRIVING");
             userRepository.updateNullRiderEnabledToTrue();
             System.out.println(">>> DatabaseMigrationRunner: Successfully set all existing NULL riderEnabled to true");
+            userRepository.migrateExistingPassengerCouriers();
+            System.out.println(">>> DatabaseMigrationRunner: Successfully migrated existing Passenger Couriers to SENDER with passengerApproved = true");
+            userRepository.updateNullPassengerApprovedToFalse();
+            System.out.println(">>> DatabaseMigrationRunner: Successfully set remaining NULL passengerApproved to false");
         } catch (Exception e) {
             System.err.println(">>> DatabaseMigrationRunner failed to run: " + e.getMessage());
         }

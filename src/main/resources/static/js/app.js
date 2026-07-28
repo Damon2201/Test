@@ -98,6 +98,7 @@ function parseJwtClaims(token) {
 
 // Global App State
 let currentUser = null;
+let currentViewMode = 'SENDER'; // 'SENDER' or 'PASSENGER'
 let activeModal = null; // null, 'signin', 'register', 'book-parcel', 'verify-pickup', 'verify-delivery', 'simulated-razorpay', 'book-seat', 'ride-tracking'
 let loadedTrips = [];
 let selectedTripForBooking = null;
@@ -589,7 +590,15 @@ function renderApp() {
                     </div>
                 </div>
             </div>
-            <div class="nav-right">
+            <div class="nav-right" style="display:flex; align-items:center; gap:16px;">
+                ${currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'TRAVELER' ? `
+                    <div class="role-switch-container" onclick="event.stopPropagation();">
+                        <select id="role-view-select" onchange="switchViewMode(this.value)" class="form-control" style="padding:6px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid var(--border); background:var(--bg-surface); color:var(--text-white); cursor:pointer; width:130px;">
+                            <option value="SENDER" ${currentViewMode === 'SENDER' ? 'selected' : ''}>📦 Sender</option>
+                            <option value="PASSENGER" ${currentViewMode === 'PASSENGER' ? 'selected' : ''}>✈️ Passenger</option>
+                        </select>
+                    </div>
+                ` : ''}
                 ${currentUser ? `
                     <div class="user-profile-btn" onclick="logout()">
                         <div class="user-avatar">${currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : 'U'}</div>
@@ -621,36 +630,71 @@ function renderApp() {
         document.body.classList.remove('customer-theme');
     } else {
         document.body.classList.add('customer-theme');
-        const hasTravelerCap = currentUser.capabilities && currentUser.capabilities.includes('TRAVELER');
-        
-        // Initialize default tab if empty
-        if (!currentCustomerTab) {
-            if (currentUser.role === 'RIDER') {
-                currentCustomerTab = 'carpool';
-            } else {
+        const isCaptain = currentUser.role === 'TRAVELER';
+        const isPassengerMode = (currentViewMode === 'PASSENGER' && currentUser.passengerApproved);
+
+        if (currentViewMode === 'PASSENGER' && !currentUser.passengerApproved) {
+            mainContentHtml = renderPassengerKycInline();
+        } else if (isPassengerMode) {
+            if (!currentCustomerTab || currentCustomerTab === 'parcel' || currentCustomerTab === 'carpool' || currentCustomerTab === 'taxi') {
+                currentCustomerTab = 'journeys';
+            }
+            switch (currentCustomerTab) {
+                case 'journeys':
+                    mainContentHtml = renderPassengerJourneysPortal();
+                    break;
+                case 'bookings':
+                    mainContentHtml = renderPassengerBookingsPortal();
+                    break;
+                case 'profile':
+                    mainContentHtml = renderCustomerProfile();
+                    break;
+                default:
+                    currentCustomerTab = 'journeys';
+                    mainContentHtml = renderPassengerJourneysPortal();
+            }
+        } else if (isCaptain) {
+            if (!currentCustomerTab || currentCustomerTab === 'journeys' || currentCustomerTab === 'bookings') {
                 currentCustomerTab = 'parcel';
             }
-        }
-
-        switch (currentCustomerTab) {
-            case 'parcel':
-                mainContentHtml = hasTravelerCap ? renderCaptainParcelPortal() : renderSenderPortal();
-                break;
-            case 'carpool':
-                mainContentHtml = hasTravelerCap ? renderCaptainCarpoolPortal() : renderRiderPortal();
-                break;
-            case 'taxi':
-                mainContentHtml = hasTravelerCap ? renderCaptainTaxiPortal() : renderRiderPortal();
-                break;
-            case 'captain':
+            switch (currentCustomerTab) {
+                case 'parcel':
+                    mainContentHtml = renderCaptainParcelPortal();
+                    break;
+                case 'carpool':
+                    mainContentHtml = renderCaptainCarpoolPortal();
+                    break;
+                case 'taxi':
+                    mainContentHtml = renderCaptainTaxiPortal();
+                    break;
+                case 'profile':
+                    mainContentHtml = renderCustomerProfile();
+                    break;
+                default:
+                    currentCustomerTab = 'parcel';
+                    mainContentHtml = renderCaptainParcelPortal();
+            }
+        } else {
+            if (!currentCustomerTab || currentCustomerTab === 'journeys' || currentCustomerTab === 'bookings') {
                 currentCustomerTab = 'parcel';
-                mainContentHtml = hasTravelerCap ? renderCaptainParcelPortal() : renderSenderPortal();
-                break;
-            case 'profile':
-                mainContentHtml = renderCustomerProfile();
-                break;
-            default:
-                mainContentHtml = renderSenderPortal();
+            }
+            switch (currentCustomerTab) {
+                case 'parcel':
+                    mainContentHtml = renderSenderPortal();
+                    break;
+                case 'carpool':
+                    mainContentHtml = renderRiderPortal();
+                    break;
+                case 'taxi':
+                    mainContentHtml = renderRiderPortal();
+                    break;
+                case 'profile':
+                    mainContentHtml = renderCustomerProfile();
+                    break;
+                default:
+                    currentCustomerTab = 'parcel';
+                    mainContentHtml = renderSenderPortal();
+            }
         }
     }
 
@@ -658,30 +702,51 @@ function renderApp() {
 
     let navBarHtml = '';
     if (currentUser && currentUser.role !== 'ADMIN') {
-        const hasTravelerCap = currentUser.capabilities && currentUser.capabilities.includes('TRAVELER');
-        const hasRiderAccess = currentUser.capabilities && (currentUser.capabilities.includes('RIDER') || currentUser.capabilities.includes('TRAVELER'));
-        navBarHtml = `
-            <nav class="bottom-nav-bar">
-                <button class="bottom-nav-item ${currentCustomerTab === 'parcel' ? 'active' : ''}" onclick="switchCustomerTab('parcel')">
-                    <span class="nav-icon">📦</span>
-                    <span>Parcel</span>
-                </button>
-                ${hasRiderAccess ? `
-                <button class="bottom-nav-item ${currentCustomerTab === 'carpool' ? 'active' : ''}" onclick="switchCustomerTab('carpool')">
-                    <span class="nav-icon">🚗</span>
-                    <span>Carpool</span>
-                </button>
-                <button class="bottom-nav-item ${currentCustomerTab === 'taxi' ? 'active' : ''}" onclick="switchCustomerTab('taxi')">
-                    <span class="nav-icon">🚖</span>
-                    <span>Local Taxi</span>
-                </button>
-                ` : ''}
-                <button class="bottom-nav-item ${currentCustomerTab === 'profile' ? 'active' : ''}" onclick="switchCustomerTab('profile')">
-                    <span class="nav-icon">👤</span>
-                    <span>Profile</span>
-                </button>
-            </nav>
-        `;
+        const isPassengerMode = (currentViewMode === 'PASSENGER' && currentUser.passengerApproved);
+        if (currentViewMode === 'PASSENGER' && !currentUser.passengerApproved) {
+            navBarHtml = '';
+        } else if (isPassengerMode) {
+            navBarHtml = `
+                <nav class="bottom-nav-bar">
+                    <button class="bottom-nav-item ${currentCustomerTab === 'journeys' ? 'active' : ''}" onclick="switchCustomerTab('journeys')">
+                        <span class="nav-icon">✈️</span>
+                        <span>My Journeys</span>
+                    </button>
+                    <button class="bottom-nav-item ${currentCustomerTab === 'bookings' ? 'active' : ''}" onclick="switchCustomerTab('bookings')">
+                        <span class="nav-icon">📦</span>
+                        <span>Incoming Bookings</span>
+                    </button>
+                    <button class="bottom-nav-item ${currentCustomerTab === 'profile' ? 'active' : ''}" onclick="switchCustomerTab('profile')">
+                        <span class="nav-icon">👤</span>
+                        <span>Profile</span>
+                    </button>
+                </nav>
+            `;
+        } else {
+            const hasRiderAccess = currentUser.capabilities && (currentUser.capabilities.includes('RIDER') || currentUser.capabilities.includes('TRAVELER'));
+            navBarHtml = `
+                <nav class="bottom-nav-bar">
+                    <button class="bottom-nav-item ${currentCustomerTab === 'parcel' ? 'active' : ''}" onclick="switchCustomerTab('parcel')">
+                        <span class="nav-icon">📦</span>
+                        <span>Parcel</span>
+                    </button>
+                    ${hasRiderAccess ? `
+                    <button class="bottom-nav-item ${currentCustomerTab === 'carpool' ? 'active' : ''}" onclick="switchCustomerTab('carpool')">
+                        <span class="nav-icon">🚗</span>
+                        <span>Carpool</span>
+                    </button>
+                    <button class="bottom-nav-item ${currentCustomerTab === 'taxi' ? 'active' : ''}" onclick="switchCustomerTab('taxi')">
+                        <span class="nav-icon">🚖</span>
+                        <span>Local Taxi</span>
+                    </button>
+                    ` : ''}
+                    <button class="bottom-nav-item ${currentCustomerTab === 'profile' ? 'active' : ''}" onclick="switchCustomerTab('profile')">
+                        <span class="nav-icon">👤</span>
+                        <span>Profile</span>
+                    </button>
+                </nav>
+            `;
+        }
     }
 
     root.innerHTML = `
@@ -826,20 +891,20 @@ function renderKycRequiredScreen(kycStatus) {
                 </div>
                 <div class="form-group" style="margin-bottom:14px;">
                     <label class="form-label">Aadhaar Card (12 Digits)</label>
-                    <input type="text" id="kyc-aadhaar" class="form-control" style="padding-left:16px;" value="1234-5678-9012" required />
+                    <input type="text" id="kyc-aadhaar" class="form-control" style="padding-left:16px;" placeholder="12-digit Aadhaar (e.g. 1234-5678-9012)" required />
                 </div>
                 <div id="kyc-driving-fields" style="display:block;">
                     <div class="form-group" style="margin-bottom:14px;">
                         <label class="form-label">PAN Card Number</label>
-                        <input type="text" id="kyc-pan" class="form-control" style="padding-left:16px;" value="ABCDE1234F" required />
+                        <input type="text" id="kyc-pan" class="form-control" style="padding-left:16px;" placeholder="10-character PAN (e.g. ABCDE1234F)" required />
                     </div>
                     <div class="form-group" style="margin-bottom:14px;">
                         <label class="form-label">Driving Licence Number</label>
-                        <input type="text" id="kyc-dl" class="form-control" style="padding-left:16px;" value="DL-12345-KAR" required />
+                        <input type="text" id="kyc-dl" class="form-control" style="padding-left:16px;" placeholder="Driving Licence Number (e.g. DL-12345-KAR)" required />
                     </div>
                     <div class="form-group" style="margin-bottom:24px;">
                         <label class="form-label">Vehicle RC Number</label>
-                        <input type="text" id="kyc-rc" class="form-control" style="padding-left:16px;" value="KA-01-AB-1234" required />
+                        <input type="text" id="kyc-rc" class="form-control" style="padding-left:16px;" placeholder="Vehicle RC Number (e.g. KA-01-AB-1234)" required />
                     </div>
                 </div>
 
@@ -859,12 +924,12 @@ function renderPublishTripForm() {
             <form id="captain-publish-form">
                 <div class="form-group" style="margin-bottom:14px; position:relative;">
                     <label class="form-label">Origin City</label>
-                    <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" value="Bengaluru" autocomplete="off" required />
+                    <input type="text" id="pub-origin" class="form-control" style="padding-left:16px;" placeholder="Origin City (e.g. Bengaluru)" autocomplete="off" required />
                     <div id="pub-origin-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                 </div>
                 <div class="form-group" style="margin-bottom:14px; position:relative;">
                     <label class="form-label">Destination City</label>
-                    <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" value="Hyderabad" autocomplete="off" required />
+                    <input type="text" id="pub-dest" class="form-control" style="padding-left:16px;" placeholder="Destination City (e.g. Hyderabad)" autocomplete="off" required />
                     <div id="pub-dest-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
                 </div>
                 
@@ -896,17 +961,17 @@ function renderPublishTripForm() {
                 </div>
                 <div class="form-group" style="margin-bottom:20px;">
                     <label class="form-label">Bag space you can spare (kg)</label>
-                    <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="5.0" min="0.1" max="10" step="0.1" required />
+                    <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" placeholder="e.g. 5.0" min="0.1" max="10" step="0.1" required />
                 </div>
                 ` : `
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
                     <div class="form-group">
                         <label class="form-label">Trunk Space (kg)</label>
-                        <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" value="25.0" step="0.5" required />
+                        <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" placeholder="e.g. 25.0" step="0.5" required />
                     </div>
                     <div class="form-group">
                         <label class="form-label">Seats</label>
-                        <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" value="3" required />
+                        <input type="number" id="pub-seats" class="form-control" style="padding-left:16px;" placeholder="e.g. 3" required />
                     </div>
                 </div>
                 `}
@@ -939,15 +1004,15 @@ function renderCaptainParcelPortal() {
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
                         <div>
                             <label class="form-label" style="font-size:10px; text-align:center; display:block;">Latitude</label>
-                            <input type="number" id="gps-lat" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="12.9716" step="0.0001" required />
+                            <input type="number" id="gps-lat" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" placeholder="e.g. 12.9716" step="0.0001" required />
                         </div>
                         <div>
                             <label class="form-label" style="font-size:10px; text-align:center; display:block;">Longitude</label>
-                            <input type="number" id="gps-lng" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="77.5946" step="0.0001" required />
+                            <input type="number" id="gps-lng" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" placeholder="e.g. 77.5946" step="0.0001" required />
                         </div>
                         <div>
                             <label class="form-label" style="font-size:10px; text-align:center; display:block;">Speed (km/h)</label>
-                            <input type="number" id="gps-speed" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="85.0" step="0.1" required />
+                            <input type="number" id="gps-speed" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" placeholder="e.g. 85.0" step="0.1" required />
                         </div>
                     </div>
                     <button type="button" id="btn-device-gps" class="btn-search" style="width:100%; margin-bottom:10px; background:var(--bg-surface); color:var(--text-title); border:1px solid var(--border);">📍 Use Device GPS</button>
@@ -996,15 +1061,15 @@ function renderCaptainCarpoolPortal() {
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
                         <div>
                             <label class="form-label" style="font-size:10px; text-align:center; display:block;">Latitude</label>
-                            <input type="number" id="gps-lat" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="12.9716" step="0.0001" required />
+                            <input type="number" id="gps-lat" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" placeholder="e.g. 12.9716" step="0.0001" required />
                         </div>
                         <div>
                             <label class="form-label" style="font-size:10px; text-align:center; display:block;">Longitude</label>
-                            <input type="number" id="gps-lng" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="77.5946" step="0.0001" required />
+                            <input type="number" id="gps-lng" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" placeholder="e.g. 77.5946" step="0.0001" required />
                         </div>
                         <div>
                             <label class="form-label" style="font-size:10px; text-align:center; display:block;">Speed (km/h)</label>
-                            <input type="number" id="gps-speed" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" value="85.0" step="0.1" required />
+                            <input type="number" id="gps-speed" class="form-control" style="padding:10px 6px; text-align:center; font-size:12px;" placeholder="e.g. 85.0" step="0.1" required />
                         </div>
                     </div>
                     <button type="button" id="btn-device-gps" class="btn-search" style="width:100%; margin-bottom:10px; background:var(--bg-surface); color:var(--text-title); border:1px solid var(--border);">📍 Use Device GPS</button>
@@ -1055,11 +1120,11 @@ function renderCaptainTaxiPortal() {
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:12px;">
                 <div>
                     <label class="form-label">Current Latitude</label>
-                    <input type="number" id="local-gps-lat" class="form-control" value="12.9716" step="0.0001" onchange="updateLocalGpsCoordinates()" />
+                    <input type="number" id="local-gps-lat" class="form-control" placeholder="Latitude" step="0.0001" onchange="updateLocalGpsCoordinates()" />
                 </div>
                 <div>
                     <label class="form-label">Current Longitude</label>
-                    <input type="number" id="local-gps-lng" class="form-control" value="77.5946" step="0.0001" onchange="updateLocalGpsCoordinates()" />
+                    <input type="number" id="local-gps-lng" class="form-control" placeholder="Longitude" step="0.0001" onchange="updateLocalGpsCoordinates()" />
                 </div>
             </div>
             <button type="button" class="btn-search" style="width:100%; margin-bottom:20px; background:var(--bg-surface); color:var(--text-title); border:1px solid var(--border);" onclick="useLocalDeviceGps()">📍 Use Current Location</button>
@@ -1325,17 +1390,17 @@ function renderRiderPortal() {
                         <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:16px;">
                             <div class="form-group" style="position:relative; margin-bottom:0;">
                                 <label class="form-label">Pickup Area Address</label>
-                                <input type="text" id="local-taxi-pickup" class="form-control" style="padding-left:16px;" value="Koramangala, Bengaluru" autocomplete="off" required />
+                                <input type="text" id="local-taxi-pickup" class="form-control" style="padding-left:16px;" placeholder="Search pickup area..." autocomplete="off" required />
                                 <div id="local-taxi-pickup-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                                <input type="hidden" id="local-taxi-pickup-lat" value="12.9352" />
-                                <input type="hidden" id="local-taxi-pickup-lng" value="77.6245" />
+                                <input type="hidden" id="local-taxi-pickup-lat" value="" />
+                                <input type="hidden" id="local-taxi-pickup-lng" value="" />
                             </div>
                             <div class="form-group" style="position:relative; margin-bottom:0;">
                                 <label class="form-label">Dropoff Area Address</label>
-                                <input type="text" id="local-taxi-dropoff" class="form-control" style="padding-left:16px;" value="Indiranagar, Bengaluru" autocomplete="off" required />
+                                <input type="text" id="local-taxi-dropoff" class="form-control" style="padding-left:16px;" placeholder="Search dropoff area..." autocomplete="off" required />
                                 <div id="local-taxi-dropoff-suggestions" style="position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; z-index:9999; display:none; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></div>
-                                <input type="hidden" id="local-taxi-dropoff-lat" value="12.9719" />
-                                <input type="hidden" id="local-taxi-dropoff-lng" value="77.6412" />
+                                <input type="hidden" id="local-taxi-dropoff-lat" value="" />
+                                <input type="hidden" id="local-taxi-dropoff-lng" value="" />
                             </div>
                         </div>
 
@@ -1665,16 +1730,16 @@ function renderActiveModal() {
                     <form id="parcel-booking-form">
                         <div class="form-group" style="margin-bottom:12px;">
                             <label class="form-label">Goods Description</label>
-                            <input type="text" id="book-goods" class="form-control" style="padding-left:16px;" placeholder="e.g. Urgent Documents, Electronics, Laptop" value="Urgent Medical Documents & Supplies" required />
+                            <input type="text" id="book-goods" class="form-control" style="padding-left:16px;" placeholder="e.g. Urgent Documents, Electronics, Laptop" required />
                         </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                             <div class="form-group">
                                 <label class="form-label">Declared Value (INR ₹)</label>
-                                <input type="number" id="book-value" class="form-control" style="padding-left:16px;" value="15000" oninput="updateFareQuote(this.value)" required />
+                                <input type="number" id="book-value" class="form-control" style="padding-left:16px;" placeholder="e.g. 5000" oninput="updateFareQuote(this.value)" required />
                             </div>
                             <div class="form-group">
                                 <label class="form-label">Weight (kg)</label>
-                                <input type="number" id="book-weight" class="form-control" style="padding-left:16px;" value="4.0" step="0.1" oninput="updateFareQuote(document.getElementById('book-value').value)" required />
+                                <input type="number" id="book-weight" class="form-control" style="padding-left:16px;" placeholder="e.g. 2.5" step="0.1" oninput="updateFareQuote(document.getElementById('book-value').value)" required />
                             </div>
                         </div>
                         <div class="form-group" style="margin-bottom:12px; position:relative;">
@@ -1734,7 +1799,7 @@ function renderActiveModal() {
                         </div>
                         <div class="form-group" style="margin-bottom:20px;">
                             <label class="form-label">Handover Proof Photo URL</label>
-                            <input type="text" id="verify-pickup-photo" class="form-control" style="padding-left:16px;" value="https://example.com/proofs/pickup_${selectedParcelForVerification.id}.jpg" required />
+                            <input type="text" id="verify-pickup-photo" class="form-control" style="padding-left:16px;" placeholder="Enter proof image URL (e.g., https://example.com/proof.jpg)" required />
                         </div>
                         <button type="submit" class="btn-search" style="width:100%; background:var(--primary-gradient);">Confirm Pickup Verification</button>
                     </form>
@@ -1759,7 +1824,7 @@ function renderActiveModal() {
                         </div>
                         <div class="form-group" style="margin-bottom:20px;">
                             <label class="form-label">Delivery Proof Photo URL</label>
-                            <input type="text" id="verify-delivery-photo" class="form-control" style="padding-left:16px;" value="https://example.com/proofs/delivery_${selectedParcelForVerification.id}.jpg" required />
+                            <input type="text" id="verify-delivery-photo" class="form-control" style="padding-left:16px;" placeholder="Enter proof image URL (e.g., https://example.com/proof.jpg)" required />
                         </div>
                         <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green); box-shadow: 0 4px 15px var(--accent-glow);">Confirm Delivery & Release Escrow</button>
                     </form>
@@ -2257,9 +2322,19 @@ function bindPostRenderListeners() {
         fetchParcelsForCaptain();
     }
 
+    const passengerParcelsContainer = document.getElementById('passenger-parcels-list');
+    if (passengerParcelsContainer) {
+        fetchParcelsForPassenger();
+    }
+
     const captainTripsListContainer = document.getElementById('captain-trips-list-container') || document.getElementById('captain-trips-list-carpool-container');
     if (captainTripsListContainer) {
         fetchTripsForCaptainDashboard();
+    }
+
+    const passengerTripsContainer = document.getElementById('passenger-trips-list');
+    if (passengerTripsContainer) {
+        fetchPassengerTrips();
     }
 
     const captainRidesContainer = document.getElementById('captain-rides-container');
@@ -6019,6 +6094,319 @@ window.enableRiderRole = async function() {
     } catch (err) {
         console.error("Error enabling rider role", err);
         showToast("Network error enabling booking tabs.", "error");
+    }
+};
+
+window.switchViewMode = function(mode) {
+    currentViewMode = mode;
+    if (currentViewMode === 'PASSENGER') {
+        currentCustomerTab = 'journeys';
+    } else {
+        currentCustomerTab = 'parcel';
+    }
+    renderApp();
+};
+
+window.checkKycStatusDirectly = async function() {
+    if (!currentUser) return;
+    try {
+        const response = await fetch(`${API_BASE}/auth/users/me`, {
+            headers: getAuthHeaders()
+        });
+        if (response.ok) {
+            const data = await response.json();
+            currentUser = data;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            showToast("User status updated!", "success");
+            renderApp();
+        } else {
+            showToast("Failed to fetch fresh user data", "error");
+        }
+    } catch (e) {
+        showToast("Error checking KYC status", "error");
+    }
+};
+
+window.submitPassengerKycInline = async function(event) {
+    event.preventDefault();
+    const aadhaarInput = document.getElementById('passenger-aadhaar').value.trim();
+    if (!aadhaarInput) {
+        showToast("Please enter a valid Aadhaar number", "error");
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE}/kyc/submit`, {
+            method: 'POST',
+            headers: {
+                ...getAuthHeaders(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                aadhaarNumber: aadhaarInput,
+                travelMode: 'PASSENGER'
+            })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            currentUser = data;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            showToast("Passenger KYC submitted successfully!", "success");
+            renderApp();
+        } else {
+            const err = await response.json().catch(() => ({}));
+            showToast(err.message || "Failed to submit KYC", "error");
+        }
+    } catch (e) {
+        showToast("Network error submitting KYC", "error");
+    }
+};
+
+window.renderPassengerKycInline = function() {
+    let kycStatusHtml = '';
+    if (currentUser.kycStatus === 'PENDING_APPROVAL' && currentUser.travelMode === 'PASSENGER') {
+        kycStatusHtml = `
+            <div style="text-align:center; padding:40px 20px; background:var(--bg-surface); border:1px solid var(--border); border-radius:16px; margin:20px 0;">
+                <div style="font-size:48px; margin-bottom:16px;">⏳</div>
+                <h3 style="font-size:20px; font-weight:800; color:var(--text-white); margin-bottom:8px;">Verification Pending</h3>
+                <p style="color:var(--text-body); font-size:14px; margin-bottom:24px;">Your Passenger Courier verification is pending admin review. Please wait for approval.</p>
+                <button class="btn-search" onclick="checkKycStatusDirectly()" style="background:var(--porter-gradient); padding:10px 20px;">🔄 Refresh Status</button>
+            </div>
+        `;
+    } else if (currentUser.kycStatus === 'REJECTED' && currentUser.travelMode === 'PASSENGER') {
+        kycStatusHtml = `
+            <div style="text-align:center; padding:40px 20px; background:var(--bg-surface); border:1px solid var(--border); border-radius:16px; margin:20px 0;">
+                <div style="font-size:48px; margin-bottom:16px;">❌</div>
+                <h3 style="font-size:20px; font-weight:800; color:var(--danger); margin-bottom:8px;">Verification Rejected</h3>
+                <p style="color:var(--text-body); font-size:14px; margin-bottom:24px;">Your Passenger Courier verification was rejected. Please submit a valid 12-digit Aadhaar again.</p>
+                <form id="passenger-kyc-inline-form" onsubmit="submitPassengerKycInline(event)" style="max-width:400px; margin:0 auto; text-align:left;">
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label class="form-label">Aadhaar Card (12 Digits)</label>
+                        <input type="text" id="passenger-aadhaar" class="form-control" placeholder="12-digit Aadhaar (e.g. 1234-5678-9012)" style="padding-left:16px;" required />
+                    </div>
+                    <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green);">Re-submit Passenger KYC</button>
+                </form>
+            </div>
+        `;
+    } else {
+        kycStatusHtml = `
+            <div style="padding:32px; background:var(--bg-surface); border:1px solid var(--border); border-radius:16px; margin:20px 0;">
+                <div style="text-align:center; margin-bottom:24px;">
+                    <div style="font-size:48px; margin-bottom:16px;">✈️</div>
+                    <h3 style="font-size:22px; font-weight:800; color:var(--text-white); margin-bottom:8px;">Passenger Courier Activation</h3>
+                    <p style="color:var(--text-body); font-size:14px; max-width:500px; margin:0 auto;">
+                        Earn money by carrying light parcels during your regular flights, trains, or bus journeys. Only Aadhaar verification is required.
+                    </p>
+                </div>
+                <form id="passenger-kyc-inline-form" onsubmit="submitPassengerKycInline(event)" style="max-width:400px; margin:0 auto;">
+                    <div class="form-group" style="margin-bottom:20px;">
+                        <label class="form-label">Aadhaar Card (12 Digits)</label>
+                        <input type="text" id="passenger-aadhaar" class="form-control" placeholder="12-digit Aadhaar (e.g. 1234-5678-9012)" style="padding-left:16px;" required />
+                    </div>
+                    <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green);">Submit KYC to Activate Passenger Mode</button>
+                </form>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="container" style="max-width:800px; margin:0 auto; padding:20px 16px;">
+            <div class="hero-section" style="padding:24px; margin-bottom:24px; border-radius:16px; background:var(--bg-surface); border:1px solid var(--border);">
+                <div class="hero-badge">PASSENGER MODE INACTIVE</div>
+                <h1 class="hero-title">Passenger Courier Dashboard</h1>
+                <p class="hero-subtitle">Complete a quick 1-step KYC to unlock this portal.</p>
+            </div>
+            ${kycStatusHtml}
+        </div>
+    `;
+};
+
+window.renderPassengerJourneysPortal = function() {
+    return `
+        <div class="container" style="max-width:1200px; margin:0 auto; padding:20px 16px;">
+            <div class="hero-section" style="padding:24px; margin-bottom:24px; border-radius:16px; background:var(--bg-surface); border:1px solid var(--border);">
+                <div class="hero-badge">PASSENGER COURIER</div>
+                <h1 class="hero-title">My Passenger Journeys</h1>
+                <p class="hero-subtitle">Publish travel routes, tickets, PNRs, and manage spare luggage bag capacity.</p>
+            </div>
+            
+            <div style="display:grid; grid-template-columns:1fr 1.5fr; gap:24px;">
+                <div>
+                    ${renderPublishTripForm()}
+                </div>
+                <div>
+                    <h3 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:16px;">My Published Journeys</h3>
+                    <div id="passenger-trips-list" class="cards-grid">
+                        <div style="color:var(--text-muted); font-size:13px;">Loading journeys...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.renderPassengerBookingsPortal = function() {
+    return `
+        <div class="container" style="max-width:1200px; margin:0 auto; padding:20px 16px;">
+            <div class="hero-section" style="padding:24px; margin-bottom:24px; border-radius:16px; background:var(--bg-surface); border:1px solid var(--border);">
+                <div class="hero-badge">INCOMING PARCELS</div>
+                <h1 class="hero-title">Matched Parcel Bookings</h1>
+                <p class="hero-subtitle">Review, carry, and verify pickup & delivery for packages matched to your journeys.</p>
+            </div>
+            
+            <h3 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:16px;">Parcels Matched to Your Journeys</h3>
+            <div id="passenger-parcels-list" class="cards-grid">
+                <div style="color:var(--text-muted); font-size:13px;">Loading matched bookings...</div>
+            </div>
+        </div>
+    `;
+};
+
+window.fetchPassengerTrips = async function() {
+    const listContainer = document.getElementById('passenger-trips-list');
+    if (!listContainer) return;
+    try {
+        const response = await fetch(`${API_BASE}/trips`, {
+            headers: getAuthHeaders()
+        });
+        if (!response.ok) throw new Error();
+        const trips = await response.json();
+        const myTrips = trips.filter(t => t.travelerId === currentUser.id);
+        
+        if (myTrips.length === 0) {
+            listContainer.innerHTML = `<div style="color:var(--text-muted); font-size:13px; text-align:center; padding:20px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px;">No published journeys yet. Use the form to publish.</div>`;
+            return;
+        }
+        
+        listContainer.innerHTML = myTrips.map(trip => `
+            <div class="route-card" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <span class="route-badge">${escapeHtml(trip.travelMode)}</span>
+                    <span style="font-size:12px; font-weight:700; color:var(--porter-teal);">PNR: ${escapeHtml(trip.ticketOrPnrNumber || 'N/A')}</span>
+                </div>
+                <div class="route-locations" style="margin-bottom:10px;">
+                    <div>🟢 <b>${escapeHtml(trip.source)}</b></div>
+                    <div style="margin-top:4px;">🔴 <b>${escapeHtml(trip.destination)}</b></div>
+                </div>
+                <div style="font-size:12px; color:var(--text-body); margin-bottom:8px;">
+                    📅 Departs: ${new Date(trip.departureTime).toLocaleString()}
+                </div>
+                <div style="font-size:12px; color:var(--text-body);">
+                    🧳 Luggage Capacity Left: <b>${trip.availableCapacityKg.toFixed(1)} kg</b>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        listContainer.innerHTML = `<div style="color:var(--danger); font-size:13px; text-align:center; padding:20px;">Error loading journeys.</div>`;
+    }
+};
+
+window.fetchParcelsForPassenger = async function() {
+    if (!currentUser) return;
+    const container = document.getElementById('passenger-parcels-list');
+    if (!container) return;
+
+    try {
+        const tripsRes = await fetch(`${API_BASE}/trips`, { headers: getAuthHeaders() });
+        if (!tripsRes.ok) throw new Error();
+        const allTrips = await tripsRes.json();
+        const myTrips = allTrips.filter(t => t.travelerId === currentUser.id);
+
+        container.innerHTML = '';
+        if (myTrips.length === 0) {
+            container.innerHTML = `<div style="color:var(--text-muted); padding:30px; text-align:center; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px;">Publish a journey to see matching bookings.</div>`;
+            return;
+        }
+
+        let bookingsFound = false;
+
+        for (const trip of myTrips) {
+            const res = await fetch(`${API_BASE}/parcels/trip/${trip.id}`, { headers: getAuthHeaders() });
+            if (!res.ok) continue;
+            const parcels = await res.json();
+
+            if (parcels && parcels.length > 0) {
+                bookingsFound = true;
+                parcels.forEach(p => {
+                    const card = document.createElement('div');
+                    card.className = 'route-card';
+
+                    let actionBtnHtml = '';
+
+                    if (p.status === 'CREATED') {
+                        actionBtnHtml = `
+                            <button class="btn-book" style="background:var(--primary-gradient); box-shadow:0 4px 15px var(--primary-glow); margin-right:8px;" onclick="acceptParcelBooking(${p.id})">Accept</button>
+                            <button class="btn-book" style="background:var(--danger); box-shadow:0 4px 15px rgba(239,68,68,0.3);" onclick="rejectParcelBooking(${p.id})">Reject</button>
+                        `;
+                    } else if (p.status === 'ACCEPTED') {
+                        actionBtnHtml = `
+                            <span style="font-weight:700; color:var(--warning); font-size:13px; margin-right:8px;">Awaiting Sender Payment</span>
+                            <button class="btn-book" style="background:var(--danger); box-shadow:0 4px 15px rgba(239,68,68,0.3);" onclick="rejectParcelBooking(${p.id})">Cancel</button>
+                        `;
+                    } else if (p.status === 'PAID_ESCROW') {
+                        actionBtnHtml = `
+                            <button class="btn-book" style="background:var(--primary-gradient); box-shadow:0 4px 15px var(--primary-glow); margin-right:8px;" onclick="openVerifyPickupModal(${p.id})">Verify Pickup</button>
+                            <button class="btn-book" style="background:var(--danger); box-shadow:0 4px 15px rgba(239,68,68,0.3);" onclick="rejectParcelBooking(${p.id})">Cancel</button>
+                        `;
+                    } else if (p.status === 'PICKED_UP' || p.status === 'IN_TRANSIT') {
+                        actionBtnHtml = `
+                            <button class="btn-book" style="background:var(--accent-green); box-shadow:0 4px 15px var(--accent-glow); margin-right:8px;" onclick="openVerifyDeliveryModal(${p.id})">Verify Delivery</button>
+                            <button class="btn-book" style="background:var(--danger); box-shadow:0 4px 15px rgba(239,68,68,0.3); margin-right:8px;" onclick="rejectParcelBooking(${p.id})">Cancel</button>
+                        `;
+                    } else if (p.status === 'DELIVERED') {
+                        actionBtnHtml = `
+                            <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                                <span style="font-weight:700; color:var(--accent-green); font-size:13px; margin-bottom:4px;">✅ Fulfilling Completed</span>
+                                <button class="btn-book" style="background:var(--warning); color:black; font-weight:700;" onclick="openRatingModal(${p.id}, null, ${p.senderId}, 'parcel')">⭐ Rate Sender</button>
+                            </div>
+                        `;
+                    } else if (p.status === 'CANCELLED') {
+                        actionBtnHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled</span>`;
+                    }
+
+                    let chatBtnHtml = '';
+                    if (p.status !== 'CREATED' && p.status !== 'CANCELLED') {
+                        chatBtnHtml = `<button class="btn-book" style="background:var(--porter-teal); margin-right:8px;" onclick="openChatModalBtn(${p.id})">💬 Chat</button>`;
+                    }
+
+                    card.innerHTML = `
+                        <div class="card-top">
+                            <div>
+                                <span style="font-size:11px; color:var(--text-muted); font-weight:700;">CARGO ID: #${p.id}</span>
+                                <h3 style="font-size:16px; font-weight:800; margin-top:2px;">${escapeHtml(p.goodsDescription)}</h3>
+                            </div>
+                            <span class="verified-badge" style="text-transform:uppercase; ${p.status === 'CREATED' ? 'background:rgba(245,158,11,0.15); color:var(--warning); border-color:rgba(245,158,11,0.3);' : ''}">${p.status === 'CREATED' ? 'PENDING REQUEST' : escapeHtml(p.status)}</span>
+                        </div>
+                        <div style="font-size:12px; color:var(--text-body); margin-bottom:12px;">
+                            ${p.status === 'CREATED' ? `
+                                <div style="background:var(--bg-surface); padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid var(--border);">
+                                    <div style="color:var(--text-white); font-weight:700; margin-bottom:4px;">👤 Sender Details</div>
+                                    <div style="font-size:11px; color:var(--text-white);">Name: <b>${escapeHtml(getUserName(p.senderId))}</b></div>
+                                    <div style="font-size:11px; color:var(--text-white);">Mobile: <b>${escapeHtml(getUserMobile(p.senderId))}</b></div>
+                                    <div style="font-size:11px; color:var(--porter-teal); margin-top:6px; font-weight:600;">📍 Pickup Area: ${escapeHtml(p.pickupLocation)}</div>
+                                </div>
+                            ` : ''}
+                            <div><b>Route:</b> ${escapeHtml(p.pickupLocation)} ➔ ${escapeHtml(p.dropoffLocation)}</div>
+                            <div><b>Weight:</b> ${p.estimatedWeightKg} kg | <b>Earnings:</b> ₹${Math.round(p.calculatedFare)}</div>
+                        </div>
+                        <div class="card-footer" style="margin-top:14px; padding-top:12px; display:flex; justify-content:space-between; align-items:center;">
+                            <span class="price-amount" style="font-size:18px;">₹${Math.round(p.calculatedFare)}</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                ${chatBtnHtml}
+                                ${actionBtnHtml}
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            }
+        }
+
+        if (!bookingsFound) {
+            container.innerHTML = `<div style="color:var(--text-muted); padding:30px; text-align:center; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px;">No pending cargos requested for your journeys yet.</div>`;
+        }
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = `<div style="color:var(--danger); padding:40px;">Error loading cargo list</div>`;
     }
 };
 

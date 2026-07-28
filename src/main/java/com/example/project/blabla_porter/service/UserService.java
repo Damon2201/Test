@@ -110,6 +110,7 @@ public class UserService {
                 .kycStatus(user.getKycStatus())
                 .travelMode(user.getTravelMode())
                 .ticketOrPnrNumber(user.getTicketOrPnrNumber())
+                .passengerApproved(user.getPassengerApproved())
                 .build();
     }
 
@@ -143,6 +144,7 @@ public class UserService {
                 .kycStatus(user.getKycStatus())
                 .travelMode(user.getTravelMode())
                 .ticketOrPnrNumber(user.getTicketOrPnrNumber())
+                .passengerApproved(user.getPassengerApproved())
                 .build();
     }
 
@@ -161,13 +163,15 @@ public class UserService {
             throw new IllegalArgumentException("Admins cannot submit KYC!");
         }
 
-        if (user.getRole() != User.UserRole.TRAVELER) {
-            user.setRole(User.UserRole.TRAVELER);
-        }
-
         String mode = req.getTravelMode();
         if (mode == null || mode.isBlank()) {
             mode = "DRIVING";
+        }
+
+        if (!"PASSENGER".equalsIgnoreCase(mode)) {
+            if (user.getRole() != User.UserRole.TRAVELER) {
+                user.setRole(User.UserRole.TRAVELER);
+            }
         }
         user.setTravelMode(mode);
 
@@ -206,6 +210,10 @@ public class UserService {
     public User approveKyc(Long userId, Long adminId) {
         User user = getById(userId);
         user.setKycStatus(User.KycStatus.APPROVED);
+        if ("PASSENGER".equalsIgnoreCase(user.getTravelMode())) {
+            user.setPassengerApproved(true);
+            user.setRole(User.UserRole.SENDER);
+        }
         User saved = userRepository.save(user);
 
         log.info("AUDIT LOG: Admin [ID: {}] approved KYC for User [ID: {}]. Status updated to: APPROVED. Timestamp: {}",
@@ -239,6 +247,10 @@ public class UserService {
             throw new IllegalStateException("User is not in PENDING_APPROVAL status! Current status: " + user.getKycStatus());
         }
         user.setKycStatus(approved ? User.KycStatus.APPROVED : User.KycStatus.REJECTED);
+        if (approved && "PASSENGER".equalsIgnoreCase(user.getTravelMode())) {
+            user.setPassengerApproved(true);
+            user.setRole(User.UserRole.SENDER);
+        }
         User saved = userRepository.save(user);
 
         log.info("AUDIT LOG: Admin [ID: {}] reviewed KYC for User [ID: {}]. Approved: {}. Status updated to: {}. Timestamp: {}",
@@ -347,6 +359,7 @@ public class UserService {
                 .kycStatus(user.getKycStatus())
                 .travelMode(user.getTravelMode())
                 .ticketOrPnrNumber(user.getTicketOrPnrNumber())
+                .passengerApproved(user.getPassengerApproved())
                 .build();
     }
 }
