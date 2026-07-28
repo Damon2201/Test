@@ -38,12 +38,17 @@ window.fetch = async function(...args) {
         if (response.status === 401 || response.status === 403) {
             // Check if we are currently logged in. If so, automatically sign out on unauthorized error.
             if (localStorage.getItem('currentUser')) {
+                const isKycApprovedDrift = currentUser && currentUser.kycStatus === 'APPROVED' && (!currentUser.capabilities || !currentUser.capabilities.includes('TRAVELER'));
                 localStorage.removeItem('currentUser');
                 currentUser = null;
-                showToast('Session expired. Please sign in again.', 'error');
+                if (isKycApprovedDrift) {
+                    showToast('KYC Approved! Please sign in again to activate Captain mode.', 'success');
+                } else {
+                    showToast('Session expired. Please sign in again.', 'error');
+                }
                 setTimeout(() => {
                     window.location.reload();
-                }, 1500);
+                }, 2000);
             }
         }
         return response;

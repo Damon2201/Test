@@ -35,12 +35,24 @@ public class AuthController {
     @Autowired
     private jakarta.servlet.http.HttpServletRequest httpServletRequest;
 
+    @org.springframework.beans.factory.annotation.Value("${blabla.trusted.proxies:127.0.0.1,0:0:0:0:0:0:0:1}")
+    private String trustedProxiesString;
+
     private String getClientIp() {
+        String remoteAddr = httpServletRequest.getRemoteAddr();
         String xff = httpServletRequest.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
+            if ("*".equals(trustedProxiesString.trim())) {
+                return xff.split(",")[0].trim();
+            }
+            java.util.List<String> trustedProxies = java.util.Arrays.stream(trustedProxiesString.split(","))
+                    .map(String::trim)
+                    .collect(java.util.stream.Collectors.toList());
+            if (trustedProxies.contains(remoteAddr)) {
+                return xff.split(",")[0].trim();
+            }
         }
-        return httpServletRequest.getRemoteAddr();
+        return remoteAddr;
     }
 
     private final java.util.concurrent.ConcurrentHashMap<String, String> registrationOtpCache = new java.util.concurrent.ConcurrentHashMap<>();
