@@ -52,7 +52,7 @@ public class User {
     @Column(nullable = false)
     private KycStatus kycStatus;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     @Builder.Default
     private Boolean riderEnabled = false;
 
