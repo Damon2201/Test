@@ -5733,21 +5733,6 @@ function renderCustomerProfile() {
         const isNotPassenger = currentUser.travelMode !== 'PASSENGER';
 
         captainSecHtml = `
-            <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px;">
-                <h3 style="font-size:15px; font-weight:800; color:var(--text-white); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-                    🚀 Earn as a Captain (Driving)
-                </h3>
-                <p style="color:var(--text-body); font-size:12px; margin-bottom:16px; line-height:1.5;">
-                    Interested in publishing driving trips, carrying packages, or driving passengers? Apply with your Driving KYC documents.
-                </p>
-                ${currentUser.kycStatus === 'REJECTED' && currentUser.travelMode === 'DRIVING' ? `
-                    <div style="color:var(--danger); font-size:11px; margin-bottom:12px; font-weight:700;">⚠️ Previous Driving application was rejected. Please review details and apply again.</div>
-                ` : ''}
-                <button class="btn-search" style="width:100%; border:none; background: var(--porter-gradient);" onclick="activeModal = 'apply-kyc'; renderApp();">
-                    🔑 Submit Driving KYC
-                </button>
-            </div>
-
             ${isNotTraveler && isNotPassenger ? `
             <div class="route-card" style="margin-bottom:24px; padding:20px; border-radius:16px; border-color: rgba(6, 182, 212, 0.3);">
                 <h3 style="font-size:15px; font-weight:800; color:var(--porter-teal); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
@@ -6130,8 +6115,8 @@ window.checkKycStatusDirectly = async function() {
 window.submitPassengerKycInline = async function(event) {
     event.preventDefault();
     const aadhaarInput = document.getElementById('passenger-aadhaar').value.trim();
-    if (!aadhaarInput) {
-        showToast("Please enter a valid Aadhaar number", "error");
+    if (aadhaarInput.length !== 12 || isNaN(aadhaarInput)) {
+        showToast("Aadhaar number must be exactly 12 digits!", "error");
         return;
     }
     try {
@@ -6142,7 +6127,11 @@ window.submitPassengerKycInline = async function(event) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
+                userId: currentUser.id,
                 aadhaarNumber: aadhaarInput,
+                panNumber: null,
+                drivingLicenceNumber: null,
+                rcNumber: null,
                 travelMode: 'PASSENGER'
             })
         });
