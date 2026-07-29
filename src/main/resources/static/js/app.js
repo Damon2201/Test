@@ -6158,6 +6158,8 @@ window.checkKycStatusDirectly = async function() {
     } catch (e) {
         showToast("Couldn't check status, please try again", "error");
     }
+};
+
 window.togglePasswordVisibility = function(inputId, element) {
     const input = document.getElementById(inputId);
     if (!input) return;
