@@ -592,7 +592,10 @@ function renderApp() {
             </div>
             <div class="nav-right" style="display:flex; align-items:center; gap:16px;">
                 ${currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'TRAVELER' ? `
-                    <div class="role-switch-container" onclick="event.stopPropagation();">
+                    <div class="role-switch-container" onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:8px;">
+                        <span id="role-view-desc" style="font-size:11px; color:var(--text-muted); font-weight:600; text-align:right; max-width:180px; line-height:1.2;">
+                            ${currentViewMode === 'SENDER' ? 'Book rides & send parcels' : 'Traveling by flight, train, or bus'}
+                        </span>
                         <select id="role-view-select" onchange="switchViewMode(this.value)" class="form-control" style="padding:6px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid var(--border); background:var(--bg-surface); color:var(--text-white); cursor:pointer; width:130px;">
                             <option value="SENDER" ${currentViewMode === 'SENDER' ? 'selected' : ''}>📦 Sender</option>
                             <option value="PASSENGER" ${currentViewMode === 'PASSENGER' ? 'selected' : ''}>✈️ Passenger</option>
@@ -1628,12 +1631,15 @@ function renderActiveModal() {
                                 <label class="form-label">Registered 10-Digit Mobile Number</label>
                                 <input type="text" id="signin-mobile" class="form-control" style="padding-left:16px;" placeholder="Enter your mobile number" required />
                             </div>
-                            <div class="form-group" style="margin-bottom:20px;">
+                             <div class="form-group" style="margin-bottom:20px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                                     <label class="form-label" style="margin-bottom:0;">Password</label>
                                     <a href="#" style="color:var(--porter-teal); font-size:12px; font-weight:700; text-decoration:none;" onclick="triggerForgotPassword(event)">Forgot Password?</a>
                                 </div>
-                                <input type="password" id="signin-password" class="form-control" style="padding-left:16px;" placeholder="Enter your password" required />
+                                <div style="position:relative;">
+                                    <input type="password" id="signin-password" class="form-control" style="padding-left:16px; padding-right:40px;" placeholder="Enter your password" required />
+                                    <span class="password-toggle-eye" onclick="togglePasswordVisibility('signin-password', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:16px; z-index:10; user-select:none; color:var(--text-muted);">👁️</span>
+                                </div>
                             </div>
                             <button type="submit" class="btn-search" style="width:100%;">Sign In with BCrypt + JWT</button>
                         </form>
@@ -1651,9 +1657,12 @@ function renderActiveModal() {
                                 <label class="form-label">Email Address</label>
                                 <input type="email" id="reg-email" class="form-control" style="padding-left:16px;" placeholder="Enter your email address" required />
                             </div>
-                            <div class="form-group" style="margin-bottom:14px;">
+                             <div class="form-group" style="margin-bottom:14px;">
                                 <label class="form-label">Password</label>
-                                <input type="password" id="reg-password" class="form-control" style="padding-left:16px;" placeholder="Create a strong password" required />
+                                <div style="position:relative;">
+                                    <input type="password" id="reg-password" class="form-control" style="padding-left:16px; padding-right:40px;" placeholder="Create a strong password" required />
+                                    <span class="password-toggle-eye" onclick="togglePasswordVisibility('reg-password', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:16px; z-index:10; user-select:none; color:var(--text-muted);">👁️</span>
+                                </div>
                             </div>
                             <div class="form-group" style="margin-bottom:14px;">
                                 <label class="form-label">Account Role (ADMIN blocked server-side)</label>
@@ -4970,12 +4979,35 @@ window.initLocalTaxiBookingMap = function() {
         localTaxiBookingMapInstance = null;
     }
 
-    const lat1 = parseFloat(document.getElementById('local-taxi-pickup-lat').value || '12.9352');
-    const lng1 = parseFloat(document.getElementById('local-taxi-pickup-lng').value || '77.6245');
-    const lat2 = parseFloat(document.getElementById('local-taxi-dropoff-lat').value || '12.9719');
-    const lng2 = parseFloat(document.getElementById('local-taxi-dropoff-lng').value || '77.6412');
+    const pLatVal = document.getElementById('local-taxi-pickup-lat').value;
+    const pLngVal = document.getElementById('local-taxi-pickup-lng').value;
+    const dLatVal = document.getElementById('local-taxi-dropoff-lat').value;
+    const dLngVal = document.getElementById('local-taxi-dropoff-lng').value;
+
+    const hasCoords = pLatVal && pLngVal && dLatVal && dLngVal;
 
     try {
+        if (!hasCoords) {
+            // Keep map clear and centered on Bangalore by default, with no pins or route
+            localTaxiBookingMapInstance = L.map('local-taxi-booking-map').setView([12.9716, 77.5946], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(localTaxiBookingMapInstance);
+
+            setupLocalTaxiAutocomplete('local-taxi-pickup', 'local-taxi-pickup-suggestions', 'local-taxi-pickup-lat', 'local-taxi-pickup-lng', null, null, 0);
+            setupLocalTaxiAutocomplete('local-taxi-dropoff', 'local-taxi-dropoff-suggestions', 'local-taxi-dropoff-lat', 'local-taxi-dropoff-lng', null, null, 1);
+            setupLocalBlurGeocoding('local-taxi-pickup', 'local-taxi-pickup-lat', 'local-taxi-pickup-lng', null, 0);
+            setupLocalBlurGeocoding('local-taxi-dropoff', 'local-taxi-dropoff-lat', 'local-taxi-dropoff-lng', null, 1);
+
+            updateLocalTaxiFareQuote();
+            return;
+        }
+
+        const lat1 = parseFloat(pLatVal);
+        const lng1 = parseFloat(pLngVal);
+        const lat2 = parseFloat(dLatVal);
+        const lng2 = parseFloat(dLngVal);
+
         localTaxiBookingMapInstance = L.map('local-taxi-booking-map').setView([lat1, lng1], 13);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -5029,6 +5061,9 @@ function setupLocalBlurGeocoding(inputId, latId, lngId, marker, type) {
     const input = document.getElementById(inputId);
     if (!input) return;
 
+    if (input.dataset.autocompleteBound) return;
+    input.dataset.autocompleteBound = 'true';
+
     input.addEventListener('blur', function() {
         setTimeout(async () => {
             const val = input.value.trim();
@@ -5047,13 +5082,7 @@ function setupLocalBlurGeocoding(inputId, latId, lngId, marker, type) {
                         document.getElementById(latId).value = lat;
                         document.getElementById(lngId).value = lon;
 
-                        marker.setLatLng([lat, lon]);
-                        triggerLocalTaxiRouteMapUpdate(localTaxiPolyline, localTaxiPickupMarker, localTaxiDropoffMarker);
-
-                        const group = new L.featureGroup([localTaxiPickupMarker, localTaxiDropoffMarker]);
-                        localTaxiBookingMapInstance.fitBounds(group.getBounds().pad(0.2));
-
-                        updateLocalTaxiFareQuote();
+                        initLocalTaxiBookingMap();
                     }
                 }
             } catch (e) {
@@ -5069,12 +5098,31 @@ function updateLocalTaxiFareQuote() {
     const lat2El = document.getElementById('local-taxi-dropoff-lat');
     const lng2El = document.getElementById('local-taxi-dropoff-lng');
 
-    if (!lat1El || !lng1El || !lat2El || !lng2El) return;
+    const box = document.getElementById('local-taxi-fare-breakdown-box');
+    if (!box) return;
+
+    if (!lat1El || !lng1El || !lat2El || !lng2El || !lat1El.value || !lng1El.value || !lat2El.value || !lng2El.value) {
+        box.innerHTML = `
+            <div style="font-weight:700; color:var(--text-muted); text-align:center; padding:10px 0; font-size:12px;">
+                Please select both pickup and dropoff locations to view the fare breakdown.
+            </div>
+        `;
+        return;
+    }
 
     const lat1 = parseFloat(lat1El.value);
     const lng1 = parseFloat(lng1El.value);
     const lat2 = parseFloat(lat2El.value);
     const lng2 = parseFloat(lng2El.value);
+
+    if (isNaN(lat1) || isNaN(lng1) || isNaN(lat2) || isNaN(lng2)) {
+        box.innerHTML = `
+            <div style="font-weight:700; color:var(--text-muted); text-align:center; padding:10px 0; font-size:12px;">
+                Please select both pickup and dropoff locations to view the fare breakdown.
+            </div>
+        `;
+        return;
+    }
 
     const distance = calculateDistanceKm(lat1, lng1, lat2, lng2);
     const duration = distance * 3.0; // 3 mins per km
@@ -5098,27 +5146,25 @@ function updateLocalTaxiFareQuote() {
         totalFare: totalFare
     };
 
-    const box = document.getElementById('local-taxi-fare-breakdown-box');
-    if (box) {
-        box.innerHTML = `
-            <div style="font-weight:700; color:var(--porter-teal); margin-bottom:8px; font-size:13px;">💰 Transparent Fare Quote Breakdown</div>
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                <span>Base Platform Fare (includes first 2km):</span>
-                <span>₹${baseFare}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                <span>Distance Charge (${distance.toFixed(2)} km @ ₹10/km):</span>
-                <span>₹${distanceFare.toFixed(2)}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                <span>Time/Duration Charge (Est. ${duration.toFixed(0)} min @ ₹1/min):</span>
-                <span>₹${durationFare.toFixed(2)}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;">
-                <span>Flat Platform Fee:</span>
-                <span>₹${platformFee}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; font-weight:800; font-size:14px; border-top:1px dashed var(--border); padding-top:6px; color:var(--accent-green);">
+    box.innerHTML = `
+        <div style="font-weight:700; color:var(--porter-teal); margin-bottom:8px; font-size:13px;">💰 Transparent Fare Quote Breakdown</div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+            <span>Base Platform Fare (includes first 2km):</span>
+            <span>₹${baseFare}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+            <span>Distance Charge (${distance.toFixed(2)} km @ ₹10/km):</span>
+            <span>₹${distanceFare.toFixed(2)}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+            <span>Time/Duration Charge (Est. ${duration.toFixed(0)} min @ ₹1/min):</span>
+            <span>₹${durationFare.toFixed(2)}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;">
+            <span>Flat Platform Fee:</span>
+            <span>₹${platformFee}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-weight:800; font-size:14px; border-top:1px dashed var(--border); padding-top:6px; color:var(--accent-green);">
                 <span>Total Escrow Amount:</span>
                 <span>₹${totalFare.toFixed(2)} INR</span>
             </div>
@@ -5500,6 +5546,9 @@ function setupLocalTaxiAutocomplete(inputId, suggestionsId, latId, lngId, marker
         return;
     }
 
+    if (input.dataset.autocompleteBound) return;
+    input.dataset.autocompleteBound = 'true';
+
     let debounceTimeout = null;
 
     input.addEventListener('input', function() {
@@ -5544,13 +5593,7 @@ function setupLocalTaxiAutocomplete(inputId, suggestionsId, latId, lngId, marker
                         document.getElementById(latId).value = lat;
                         document.getElementById(lngId).value = lon;
                         
-                        marker.setLatLng([lat, lon]);
-                        triggerLocalTaxiRouteMapUpdate(polyline, localTaxiPickupMarker, localTaxiDropoffMarker);
-                        
-                        const group = new L.featureGroup([localTaxiPickupMarker, localTaxiDropoffMarker]);
-                        localTaxiBookingMapInstance.fitBounds(group.getBounds().pad(0.2));
-                        
-                        updateLocalTaxiFareQuote();
+                        initLocalTaxiBookingMap();
                     });
                     suggestionsBox.appendChild(div);
                 });
@@ -5682,31 +5725,11 @@ window.useRecentLocation = function(name, lat, lng, targetType) {
     
     // Trigger map update if instances exist!
     if (bookingMapInstance) {
-        if (pickupMarker && targetType === 'pickup') {
-            pickupMarker.setLatLng([lat, lng]);
-        }
-        if (dropoffMarker && targetType === 'dropoff') {
-            dropoffMarker.setLatLng([lat, lng]);
-        }
-        if (pickupMarker && dropoffMarker) {
-            const group = new L.featureGroup([pickupMarker, dropoffMarker]);
-            bookingMapInstance.fitBounds(group.getBounds().pad(0.1));
-        }
-        updateFareQuote(document.getElementById('book-value').value);
+        initBookingMap();
     }
     
     if (localTaxiBookingMapInstance) {
-        if (localTaxiPickupMarker && targetType === 'pickup') {
-            localTaxiPickupMarker.setLatLng([lat, lng]);
-        }
-        if (localTaxiDropoffMarker && targetType === 'dropoff') {
-            localTaxiDropoffMarker.setLatLng([lat, lng]);
-        }
-        if (localTaxiPickupMarker && localTaxiDropoffMarker) {
-            const group = new L.featureGroup([localTaxiPickupMarker, localTaxiDropoffMarker]);
-            localTaxiBookingMapInstance.fitBounds(group.getBounds().pad(0.1));
-        }
-        updateLocalTaxiQuote();
+        initLocalTaxiBookingMap();
     }
     showToast(`Set ${targetType} to: ${name.split(',')[0]}`, 'success');
 };
@@ -6134,6 +6157,16 @@ window.checkKycStatusDirectly = async function() {
         }
     } catch (e) {
         showToast("Couldn't check status, please try again", "error");
+    }
+window.togglePasswordVisibility = function(inputId, element) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    if (input.type === 'password') {
+        input.type = 'text';
+        element.textContent = '🙈';
+    } else {
+        input.type = 'password';
+        element.textContent = '👁️';
     }
 };
 
