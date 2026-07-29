@@ -5169,7 +5169,6 @@ function updateLocalTaxiFareQuote() {
                 <span>₹${totalFare.toFixed(2)} INR</span>
             </div>
         `;
-    }
 }
 
 async function submitLocalTaxiBookingForm(event) {
