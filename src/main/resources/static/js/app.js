@@ -866,21 +866,28 @@ function renderSenderPortal() {
 // Captain-Specific Role-Guarded Dashboards
 // ----------------------------------------------------------------------------
 function renderKycRequiredScreen(kycStatus) {
-    return `
-        <div class="hero-card">
-            <div class="hero-header">
-                <div class="hero-subtitle">🚗 Captain / Traveler Driver Portal</div>
-                <h1 class="hero-title">Driver KYC Document Verification</h1>
+    let contentHtml = '';
+    if (kycStatus === 'PENDING_APPROVAL') {
+        contentHtml = `
+            <div style="text-align:center; padding:30px 20px;">
+                <div style="font-size:48px; margin-bottom:16px;">⏳</div>
+                <h3 style="font-size:18px; font-weight:800; color:var(--text-white); margin-bottom:8px;">Verification Pending</h3>
+                <p style="color:var(--text-body); font-size:13px; margin-bottom:24px; line-height:1.5;">
+                    Your KYC documents are under review — you'll be notified once approved.
+                </p>
+                <button class="btn-search" onclick="checkKycStatusDirectly()" style="background:var(--porter-gradient); width:100%;">🔄 Refresh Status</button>
             </div>
-        </div>
-        <div class="route-card" style="max-width: 600px; margin: 0 auto;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                <h2 style="font-size:20px; font-weight:800;">🪪 Driver Verification Required</h2>
-                <span class="verified-badge" style="background:rgba(245,158,11,0.15); color:var(--warning);">STATUS: ${kycStatus}</span>
-            </div>
+        `;
+    } else {
+        contentHtml = `
             <p style="font-size:13px; color:var(--text-body); margin-bottom:24px; line-height:1.5;">
                 ⚠️ Mandatory Driver Protocol: Captains must submit Aadhaar, and either a Travel PNR or DL/RC/PAN to obtain Admin approval before publishing trips.
             </p>
+            ${kycStatus === 'REJECTED' ? `
+                <div style="color:var(--danger); font-size:12px; font-weight:700; margin-bottom:16px; border:1px dashed var(--danger); padding:10px; border-radius:8px;">
+                    ⚠️ Previous application was rejected. Please review details and submit valid documents again.
+                </div>
+            ` : ''}
             <form id="captain-kyc-form">
                 <div class="form-group" style="margin-bottom:14px;">
                     <label class="form-label">Travel Mode</label>
@@ -910,6 +917,22 @@ function renderKycRequiredScreen(kycStatus) {
 
                 <button type="submit" class="btn-search" style="width:100%; background:var(--accent-green);">Submit KYC Documents</button>
             </form>
+        `;
+    }
+
+    return `
+        <div class="hero-card">
+            <div class="hero-header">
+                <div class="hero-subtitle">🚗 Captain / Traveler Driver Portal</div>
+                <h1 class="hero-title">Driver KYC Document Verification</h1>
+            </div>
+        </div>
+        <div class="route-card" style="max-width: 600px; margin: 0 auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h2 style="font-size:20px; font-weight:800;">🪪 Driver Verification Required</h2>
+                <span class="verified-badge" style="background:rgba(245,158,11,0.15); color:var(--warning);">STATUS: ${kycStatus}</span>
+            </div>
+            ${contentHtml}
         </div>
     `;
 }
@@ -6095,20 +6118,22 @@ window.switchViewMode = function(mode) {
 window.checkKycStatusDirectly = async function() {
     if (!currentUser) return;
     try {
-        const response = await fetch(`${API_BASE}/auth/users/me`, {
+        const response = await fetch(`${API_BASE}/auth/users/${currentUser.id}`, {
             headers: getAuthHeaders()
         });
         if (response.ok) {
             const data = await response.json();
-            currentUser = data;
+            // Preserve the existing token and other client-side fields
+            const token = currentUser.token;
+            currentUser = { ...currentUser, ...data, token };
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
             showToast("User status updated!", "success");
             renderApp();
         } else {
-            showToast("Failed to fetch fresh user data", "error");
+            showToast("Couldn't check status, please try again", "error");
         }
     } catch (e) {
-        showToast("Error checking KYC status", "error");
+        showToast("Couldn't check status, please try again", "error");
     }
 };
 
