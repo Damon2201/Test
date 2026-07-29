@@ -6,6 +6,7 @@ import com.example.project.blabla_porter.dto.RegisterRequest;
 import com.example.project.blabla_porter.model.TrustedContact;
 import com.example.project.blabla_porter.model.User;
 import com.example.project.blabla_porter.service.UserService;
+import com.example.project.blabla_porter.config.RequireRole;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -122,8 +123,22 @@ public class AuthController {
     }
 
     @GetMapping("/users")
+    @RequireRole(User.UserRole.ADMIN)
     public List<User> getAllUsers() {
         return userService.getAllUsers();
+    }
+
+    @GetMapping("/users/public")
+    public List<com.example.project.blabla_porter.dto.UserPublicInfo> getAllUsersPublic() {
+        return userService.getAllUsers().stream()
+                .map(u -> new com.example.project.blabla_porter.dto.UserPublicInfo(
+                        u.getId(),
+                        u.getFullName(),
+                        u.getMobileNumber(),
+                        u.getAverageRating(),
+                        u.getTotalRatingsCount()
+                ))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     @PostMapping("/trusted-contacts")

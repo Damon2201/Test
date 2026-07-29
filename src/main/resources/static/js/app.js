@@ -464,7 +464,7 @@ function updateSignalLostBanner(containerId, lastPingTime) {
 
 async function loadUsersCache() {
     try {
-        const res = await fetch(`${API_BASE}/auth/users`, { headers: getAuthHeaders() });
+        const res = await fetch(`${API_BASE}/auth/users/public`, { headers: getAuthHeaders() });
         if (res.ok) {
             usersCache = await res.json();
         }
@@ -1037,6 +1037,10 @@ function renderPublishTripForm() {
                     <input type="number" id="pub-kg" class="form-control" style="padding-left:16px;" placeholder="e.g. 5.0" min="0.1" max="10" step="0.1" required />
                 </div>
                 ` : `
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">Travel Date & Time</label>
+                    <input type="datetime-local" id="pub-departure-time" class="form-control" style="padding-left:16px;" required />
+                </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:20px;">
                     <div class="form-group">
                         <label class="form-label">Trunk Space (kg)</label>
@@ -1625,10 +1629,8 @@ function renderAdminPortal() {
             </div>
             <div class="route-card">
                 <h2 style="font-size:20px; font-weight:800; margin-bottom:16px;">⚖️ Escrow Dispute Resolution Console</h2>
-                <div style="background:var(--bg-surface); padding:16px; border-radius:12px; border:1px solid var(--border);">
-                    <div style="font-weight:800; margin-bottom:6px;">Dispute #104 (Damaged Packaging)</div>
-                    <div style="font-size:12px; color:var(--text-body); margin-bottom:14px;">Reporter: Stefan Salvatore | Traveler: Captain Bob</div>
-                    <button class="btn-search" style="background:var(--danger); width:100%; padding:10px;" onclick="showToast('Refunded Escrow to Sender!', 'success')">Refund Sender Escrow</button>
+                <div id="admin-disputes-container">
+                    <div style="color:var(--text-body); padding:16px;">Loading disputes...</div>
                 </div>
             </div>
         </div>
@@ -1836,24 +1838,7 @@ function renderActiveModal() {
                             <input type="hidden" id="book-dropoff-lng" value="" />
                         </div>
                         <div id="booking-map" style="height:180px; border-radius:12px; margin-bottom:16px; border:1px solid var(--border); z-index:1;"></div>
-                        <div id="fare-breakdown-box" style="background:var(--bg-surface); padding:16px; border-radius:12px; margin-bottom:20px; border:1px solid var(--border);">
-                            <div style="font-weight:700; color:var(--porter-teal); margin-bottom:8px; font-size:13px;">💰 Transparent Fare Quote Breakdown</div>
-                            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                                <span>Base Route Fare:</span>
-                                <span>₹${q.baseFareInr}</span>
-                            </div>
-                            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                                <span>Distance Charge (Est. 350 Km):</span>
-                                <span>₹${q.distanceFareInr}</span>
-                            </div>
-                            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;">
-                                <span>Value-Based Surcharge (${q.categoryTierLabel}):</span>
-                                <span>₹${q.categorySurchargeInr}</span>
-                            </div>
-                            <div style="display:flex; justify-content:space-between; font-weight:800; font-size:14px; border-top:1px dashed var(--border); padding-top:6px; color:var(--accent-green);">
-                                <span>Total Escrow Amount:</span>
-                                <span>₹${q.totalFareInr} INR</span>
-                            </div>
+                        <div id="fare-breakdown-box" style="background:var(--bg-surface); padding:16px; border-radius:12px; margin-bottom:20px; border:1px solid var(--border); display:none;">
                         </div>
                         <button type="submit" class="btn-search" style="width:100%; background:var(--porter-gradient); box-shadow:0 4px 15px rgba(6,182,212,0.3);">Confirm Booking & Pay Escrow (INR ₹)</button>
                     </form>
@@ -2316,6 +2301,7 @@ function calculateHaversineDistanceJs(lat1, lon1, lat2, lon2) {
 
 async function updateFareQuote(declaredVal) {
     const val = parseFloat(declaredVal) || 0.0;
+    const box = document.getElementById('fare-breakdown-box');
     
     // Pass coordinates dynamically if available to allow backend OSRM distance calculation
     const pickupLatEl = document.getElementById('book-pickup-lat');
@@ -2323,10 +2309,6 @@ async function updateFareQuote(declaredVal) {
     const dropoffLatEl = document.getElementById('book-dropoff-lat');
     const dropoffLngEl = document.getElementById('book-dropoff-lng');
     
-    let queryParams = `declaredValue=${val}`;
-    const weightVal = parseFloat(document.getElementById('book-weight')?.value || '4.0');
-    queryParams += `&weightKg=${weightVal}`;
-
     let hasCoords = false;
     if (pickupLatEl && pickupLngEl && dropoffLatEl && dropoffLngEl) {
         const lat1 = parseFloat(pickupLatEl.value);
@@ -2334,13 +2316,28 @@ async function updateFareQuote(declaredVal) {
         const lat2 = parseFloat(dropoffLatEl.value);
         const lon2 = parseFloat(dropoffLngEl.value);
         if (!isNaN(lat1) && !isNaN(lon1) && !isNaN(lat2) && !isNaN(lon2)) {
-            queryParams += `&pickupLat=${lat1}&pickupLng=${lon1}&dropoffLat=${lat2}&dropoffLng=${lon2}`;
             hasCoords = true;
         }
     }
-    
-    if (!hasCoords) {
-        queryParams += `&distanceKm=350.0`;
+
+    if (val <= 0 || !hasCoords) {
+        if (box) {
+            box.style.display = 'none';
+        }
+        currentParcelQuote = null;
+        return;
+    }
+
+    let queryParams = `declaredValue=${val}`;
+    const weightVal = parseFloat(document.getElementById('book-weight')?.value || '4.0');
+    queryParams += `&weightKg=${weightVal}`;
+
+    if (hasCoords) {
+        const lat1 = parseFloat(pickupLatEl.value);
+        const lon1 = parseFloat(pickupLngEl.value);
+        const lat2 = parseFloat(dropoffLatEl.value);
+        const lon2 = parseFloat(dropoffLngEl.value);
+        queryParams += `&pickupLat=${lat1}&pickupLng=${lon1}&dropoffLat=${lat2}&dropoffLng=${lon2}`;
     }
 
     try {
@@ -2351,6 +2348,7 @@ async function updateFareQuote(declaredVal) {
             // Re-render modal details to display updated quote
             const box = document.getElementById('fare-breakdown-box');
             if (box) {
+                box.style.display = 'block';
                 box.innerHTML = `
                     <div style="font-weight:700; color:var(--porter-teal); margin-bottom:8px; font-size:13px;">💰 Transparent Fare Quote Breakdown</div>
                     <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
@@ -2424,6 +2422,10 @@ function bindPostRenderListeners() {
     const adminKycContainer = document.getElementById('admin-kyc-queue-container');
     if (adminKycContainer) {
         fetchPendingKycForAdmin();
+        const adminDisputesContainer = document.getElementById('admin-disputes-container');
+        if (adminDisputesContainer) {
+            fetchOpenDisputesForAdmin();
+        }
     }
 
     const riderSearchResults = document.getElementById('rider-search-results');
@@ -2526,7 +2528,7 @@ function bindPostRenderListeners() {
 
             if (role === 'TRAVELER') {
                 payload.travelMode = 'DRIVING';
-                payload.aadhaarNumber = document.getElementById('reg-aadhaar').value;
+                payload.aadhaarNumber = document.getElementById('reg-aadhaar').value.replace(/[\s-]/g, '');
                 payload.panNumber = document.getElementById('reg-pan').value;
                 payload.drivingLicenceNumber = document.getElementById('reg-dl').value;
                 payload.rcNumber = document.getElementById('reg-rc').value;
@@ -2564,9 +2566,15 @@ function bindPostRenderListeners() {
         kycForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const mode = document.getElementById('kyc-travel-mode').value;
+            const rawAadhaar = document.getElementById('kyc-aadhaar').value;
+            const aadhaar = rawAadhaar.replace(/[\s-]/g, '');
+            if (aadhaar.length !== 12 || isNaN(aadhaar)) {
+                showToast("Aadhaar number must be exactly 12 digits!", "error");
+                return;
+            }
             const payload = {
                 userId: currentUser.id,
-                aadhaarNumber: document.getElementById('kyc-aadhaar').value,
+                aadhaarNumber: aadhaar,
                 panNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-pan').value,
                 drivingLicenceNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-dl').value,
                 rcNumber: mode === 'PASSENGER' ? null : document.getElementById('kyc-rc').value,
@@ -2606,7 +2614,7 @@ function bindPostRenderListeners() {
                 travelerId: currentUser.id,
                 source: document.getElementById('pub-origin').value,
                 destination: document.getElementById('pub-dest').value,
-                departureTime: isPassenger && departureTimeInput && departureTimeInput.value
+                departureTime: departureTimeInput && departureTimeInput.value
                     ? new Date(departureTimeInput.value).toISOString()
                     : new Date(Date.now() + 86400000).toISOString(), // 24 hrs from now
                 availableCapacityKg: parseFloat(document.getElementById('pub-kg').value),
@@ -3288,12 +3296,16 @@ async function fetchPendingKycForAdmin() {
         pendingUsers.forEach(u => {
             const div = document.createElement('div');
             div.style.cssText = 'background:var(--bg-surface); padding:16px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px;';
+            const isPassenger = u.travelMode === 'PASSENGER';
             div.innerHTML = `
-                <div style="font-weight:800; margin-bottom:6px;">${escapeHtml(u.fullName)} (Captain #${u.id})</div>
+                <div style="font-weight:800; margin-bottom:6px;">${escapeHtml(u.fullName)} (${isPassenger ? 'Passenger Courier' : 'Captain'} #${u.id})</div>
                 <div style="font-size:12px; color:var(--text-body); margin-bottom:14px;">
-                    Mobile: ${escapeHtml(u.mobileNumber)} | Aadhaar: ${escapeHtml(u.aadhaarNumber)} | RC: ${escapeHtml(u.rcNumber)}
+                    Mobile: ${escapeHtml(u.mobileNumber)} | Aadhaar: ${escapeHtml(u.aadhaarNumber)}${!isPassenger ? ` | RC: ${escapeHtml(u.rcNumber || 'N/A')}` : ''}
                 </div>
-                <button class="btn-search" style="background:var(--accent-green); width:100%; padding:10px;" onclick="approveKycAdmin(${u.id})">Approve Captain KYC</button>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <button class="btn-search" style="background:var(--accent-green); padding:10px;" onclick="approveKycAdmin(${u.id})">Approve ${isPassenger ? 'Passenger' : 'Captain'}</button>
+                    <button class="btn-search" style="background:var(--danger); padding:10px;" onclick="rejectKycAdmin(${u.id})">Reject</button>
+                </div>
             `;
             container.appendChild(div);
         });
@@ -3312,11 +3324,88 @@ async function approveKycAdmin(userId) {
             return;
         }
         const user = await res.json();
-        showToast(`KYC APPROVED for Captain ${user.fullName}!`, 'success');
+        showToast(`KYC APPROVED for ${user.travelMode === 'PASSENGER' ? 'Passenger Courier' : 'Captain'} ${user.fullName}!`, 'success');
         renderApp();
     } catch (err) {
         console.error(err);
         showToast('Failed to approve KYC', 'error');
+    }
+}
+
+async function rejectKycAdmin(userId) {
+    try {
+        const res = await fetch(`${API_BASE}/kyc/admin/${userId}/review?approve=false`, { method: 'PUT', headers: getAuthHeaders() });
+        if (!res.ok) {
+            const errData = await res.json();
+            showToast(`Rejection failed: ${errData.error || errData.message}`, 'error');
+            return;
+        }
+        const user = await res.json();
+        showToast(`KYC REJECTED for ${user.travelMode === 'PASSENGER' ? 'Passenger Courier' : 'Captain'} ${user.fullName}!`, 'success');
+        renderApp();
+    } catch (err) {
+        console.error(err);
+        showToast('Failed to reject KYC', 'error');
+    }
+}
+
+async function fetchOpenDisputesForAdmin() {
+    const container = document.getElementById('admin-disputes-container');
+    if (!container) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/governance/disputes/status/OPEN`, { headers: getAuthHeaders() });
+        if (!res.ok) {
+            container.innerHTML = `<div style="color:var(--danger); padding:16px;">Failed to load open disputes.</div>`;
+            return;
+        }
+        const disputes = await res.json();
+        container.innerHTML = '';
+        if (!disputes || disputes.length === 0) {
+            container.innerHTML = `<div style="color:var(--text-muted); padding:16px;">No open disputes. System is fully reconciled.</div>`;
+            return;
+        }
+
+        disputes.forEach(d => {
+            const div = document.createElement('div');
+            div.style.cssText = 'background:var(--bg-surface); padding:16px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px;';
+            div.innerHTML = `
+                <div style="font-weight:800; margin-bottom:4px;">Dispute #${d.id} (${escapeHtml(d.disputeReason)})</div>
+                <div style="font-size:12px; color:var(--text-body); margin-bottom:12px;">
+                    Reporter: User #${d.reporterUserId} | Target: User #${d.targetUserId} <br/>
+                    Ride Req ID: ${d.rideRequestId || 'N/A'} | Parcel Req ID: ${d.parcelRequestId || 'N/A'}
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <button class="btn-search" style="background:var(--danger); padding:8px; font-size:12px;" onclick="resolveDisputeAdmin(${d.id}, 'RESOLVED_REFUND_SENDER')">💰 Refund Escrow to Sender</button>
+                    <button class="btn-search" style="background:var(--accent-green); padding:8px; font-size:12px;" onclick="resolveDisputeAdmin(${d.id}, 'RESOLVED_RELEASE_TRAVELER')">🟢 Release Escrow to Traveler</button>
+                    <button class="btn-search" style="background:var(--bg-surface); border:1px solid var(--border); padding:8px; font-size:12px;" onclick="resolveDisputeAdmin(${d.id}, 'REJECTED')">❌ Reject Dispute</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = `<div style="color:var(--danger); padding:16px;">Error loading disputes.</div>`;
+    }
+}
+
+async function resolveDisputeAdmin(disputeId, resolutionStatus) {
+    try {
+        const notes = 'Resolved by Admin';
+        const res = await fetch(`${API_BASE}/governance/disputes/${disputeId}/resolve?resolutionStatus=${resolutionStatus}&adminNotes=${encodeURIComponent(notes)}`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            showToast(`Resolution failed: ${errData.error || errData.message || 'Error'}`, 'error');
+            return;
+        }
+        showToast(`Dispute #${disputeId} resolved successfully: ${resolutionStatus}!`, 'success');
+        renderApp();
+    } catch (err) {
+        console.error(err);
+        showToast('Failed to resolve dispute', 'error');
     }
 }
 
@@ -3354,12 +3443,17 @@ window.sendRegistrationOtpBtn = async function() {
     }
 
     if (role === 'TRAVELER') {
-        const aadhaar = document.getElementById('reg-aadhaar').value.trim();
+        const rawAadhaar = document.getElementById('reg-aadhaar').value;
+        const aadhaar = rawAadhaar.replace(/[\s-]/g, '');
         const pan = document.getElementById('reg-pan').value.trim();
         const dl = document.getElementById('reg-dl').value.trim();
         const rc = document.getElementById('reg-rc').value.trim();
         if (!aadhaar || !pan || !dl || !rc) {
             showToast('Aadhaar, PAN, DL, and RC are mandatory for Driver Captain registration!', 'error');
+            return;
+        }
+        if (aadhaar.length !== 12 || isNaN(aadhaar)) {
+            showToast("Aadhaar number must be exactly 12 digits!", "error");
             return;
         }
     }
@@ -3887,18 +3981,25 @@ window.initTelemetryMap = function() {
         telemetryMarker = L.marker([initLat, initLng], { draggable: true }).addTo(telemetryMapInstance);
         telemetryMarker.bindPopup("<b>Broadcast Coordinates</b>").openPopup();
 
+        let isManualInput = true;
+
+        latInput.addEventListener('input', () => { isManualInput = true; });
+        lngInput.addEventListener('input', () => { isManualInput = true; });
+
         telemetryMapInstance.on('click', function(e) {
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
             telemetryMarker.setLatLng([lat, lng]);
             latInput.value = lat.toFixed(6);
             lngInput.value = lng.toFixed(6);
+            isManualInput = true;
         });
 
         telemetryMarker.on('dragend', function(e) {
             const position = telemetryMarker.getLatLng();
             latInput.value = position.lat.toFixed(6);
             lngInput.value = position.lng.toFixed(6);
+            isManualInput = true;
         });
 
         const gpsForm = document.getElementById('gps-broadcast-form');
@@ -3922,9 +4023,45 @@ window.initTelemetryMap = function() {
                         return;
                     }
 
-                    // Start continuous background watchPosition tracking for this trip ID
-                    startDeviceGpsTracking(activeTrip.id);
-                    showToast(`Continuous GPS Broadcaster Active for Trip #${activeTrip.id}!`, 'success');
+                    const manualLat = parseFloat(latInput.value);
+                    const manualLng = parseFloat(lngInput.value);
+                    const manualSpeed = parseFloat(document.getElementById('gps-speed').value || '0.0');
+
+                    if (isNaN(manualLat) || isNaN(manualLng)) {
+                        showToast('Please enter valid numeric latitude and longitude!', 'error');
+                        return;
+                    }
+
+                    // Send REST ping payload
+                    const payload = {
+                        tripId: activeTrip.id,
+                        travelerId: currentUser.id,
+                        latitude: manualLat,
+                        longitude: manualLng,
+                        speedKmh: manualSpeed,
+                        headingDegrees: 0.0,
+                        batteryLevel: 100
+                    };
+
+                    const postRes = await fetch(`${API_BASE}/tracking/ping`, {
+                        method: 'POST',
+                        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (postRes.ok) {
+                        showToast(`GPS Telemetry Ping Broadcasted for Trip #${activeTrip.id}!`, 'success');
+                        if (telemetryMarker) telemetryMarker.setLatLng([manualLat, manualLng]);
+                        if (telemetryMapInstance) telemetryMapInstance.setView([manualLat, manualLng], 14);
+                    } else {
+                        showToast('Failed to broadcast manual GPS ping.', 'error');
+                    }
+
+                    if (!isManualInput) {
+                        // Start continuous background watchPosition tracking for this trip ID
+                        startDeviceGpsTracking(activeTrip.id);
+                        showToast(`Continuous GPS Broadcaster Active for Trip #${activeTrip.id}!`, 'success');
+                    }
                 } catch (err) {
                     console.error(err);
                     showToast('Error broadcasting GPS telemetry', 'error');
@@ -3946,6 +4083,7 @@ window.initTelemetryMap = function() {
                         telemetryMapInstance.setView([lat, lng], 14);
                         latInput.value = lat.toFixed(6);
                         lngInput.value = lng.toFixed(6);
+                        isManualInput = false;
                         showToast('Fetched device GPS successfully!', 'success');
                     }, function(err) {
                         showToast('Device GPS permission denied or unavailable.', 'error');
@@ -4288,7 +4426,12 @@ async function fetchRidesForRider() {
                     <button class="btn-book" style="background:var(--porter-gradient); margin-right:8px;" onclick="openLocalTaxiTrackingModal(${taxi.id})">🛡️ Emergency Console</button>
                 `;
             } else if (taxi.status === 'COMPLETED') {
-                actionHtml = `<span style="font-weight:700; color:var(--accent-green); font-size:13px;">✅ Completed</span>`;
+                actionHtml = `
+                    <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                        <span style="font-weight:700; color:var(--accent-green); font-size:13px; margin-bottom:4px;">✅ Completed</span>
+                        ${taxi.tripId ? `<button class="btn-book" style="background:var(--warning); color:black; font-weight:700;" onclick="openTaxiRatingModal(${taxi.tripId})">⭐ Rate Captain</button>` : ''}
+                    </div>
+                `;
             } else if (taxi.status === 'CANCELLED') {
                 actionHtml = `<span style="font-weight:700; color:var(--danger); font-size:13px;">❌ Cancelled & Refunded</span>`;
             }
@@ -5241,6 +5384,11 @@ async function submitLocalTaxiBookingForm(event) {
     const dLng = parseFloat(document.getElementById('local-taxi-dropoff-lng').value);
     const safetyMode = document.getElementById('local-taxi-safety-mode').checked;
 
+    if (isNaN(pLat) || isNaN(pLng) || isNaN(dLat) || isNaN(dLng)) {
+        showToast("Still locating pickup/dropoff coordinates, please wait...", "warning");
+        return;
+    }
+
     const payload = {
         riderId: currentUser.id,
         pickupLocation: pickup,
@@ -5987,7 +6135,12 @@ window.initCustomerMap = function() {
 window.submitApplyKycForm = async function(event) {
     event.preventDefault();
     const mode = document.getElementById('apply-travel-mode').value;
-    const aadhaar = document.getElementById('apply-aadhaar').value;
+    const rawAadhaar = document.getElementById('apply-aadhaar').value;
+    const aadhaar = rawAadhaar.replace(/[\s-]/g, '');
+    if (aadhaar.length !== 12 || isNaN(aadhaar)) {
+        showToast("Aadhaar number must be exactly 12 digits!", "error");
+        return;
+    }
     const pan = mode === 'PASSENGER' ? null : document.getElementById('apply-pan').value;
     const dl = mode === 'PASSENGER' ? null : document.getElementById('apply-dl').value;
     const rc = mode === 'PASSENGER' ? null : document.getElementById('apply-rc').value;
@@ -6029,7 +6182,8 @@ window.submitApplyKycForm = async function(event) {
 
 window.submitPassengerKyc = async function(event) {
     event.preventDefault();
-    const aadhaar = document.getElementById('passenger-aadhaar').value.trim();
+    const rawAadhaar = document.getElementById('passenger-aadhaar').value;
+    const aadhaar = rawAadhaar.replace(/[\s-]/g, '');
     if (aadhaar.length !== 12 || isNaN(aadhaar)) {
         showToast("Aadhaar number must be exactly 12 digits!", "error");
         return;
@@ -6049,9 +6203,7 @@ window.submitPassengerKyc = async function(event) {
         });
         if (res.ok) {
             const data = await res.json();
-            currentUser.kycStatus = 'PENDING_APPROVAL';
-            currentUser.role = 'TRAVELER';
-            currentUser.travelMode = 'PASSENGER';
+            currentUser = data;
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
             showToast("Passenger Courier KYC submitted! Awaiting Admin approval.", "success");
             renderApp();
@@ -6062,6 +6214,25 @@ window.submitPassengerKyc = async function(event) {
     } catch (err) {
         console.error("Passenger KYC submission error", err);
         showToast("Network error submitting KYC.", "error");
+    }
+}
+
+window.openTaxiRatingModal = async function(tripId) {
+    try {
+        const rRes = await fetch(`${API_BASE}/rides/trip/${tripId}`, { headers: getAuthHeaders() });
+        if (rRes.ok) {
+            const rides = await rRes.json();
+            if (rides && rides.length > 0) {
+                openRatingModal(null, rides[0].id, null, 'ride');
+            } else {
+                showToast("Could not find the associated ride details for rating.", "error");
+            }
+        } else {
+            showToast("Failed to fetch ride details for taxi rating.", "error");
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("Error loading rating details.", "error");
     }
 };
 
@@ -6237,7 +6408,8 @@ window.togglePasswordVisibility = function(inputId, element) {
 
 window.submitPassengerKycInline = async function(event) {
     event.preventDefault();
-    const aadhaarInput = document.getElementById('passenger-aadhaar').value.trim();
+    const rawAadhaar = document.getElementById('passenger-aadhaar').value;
+    const aadhaarInput = rawAadhaar.replace(/[\s-]/g, '');
     if (aadhaarInput.length !== 12 || isNaN(aadhaarInput)) {
         showToast("Aadhaar number must be exactly 12 digits!", "error");
         return;
