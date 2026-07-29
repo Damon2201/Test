@@ -117,17 +117,6 @@ public class AuthController {
         return userService.login(request);
     }
 
-    @GetMapping("/users/{id}")
-    public User getUserById(@PathVariable Long id) {
-        return userService.getById(id);
-    }
-
-    @GetMapping("/users")
-    @RequireRole(User.UserRole.ADMIN)
-    public List<User> getAllUsers() {
-        return userService.getAllUsers();
-    }
-
     @GetMapping("/users/public")
     public List<com.example.project.blabla_porter.dto.UserPublicInfo> getAllUsersPublic() {
         return userService.getAllUsers().stream()
@@ -139,6 +128,17 @@ public class AuthController {
                         u.getTotalRatingsCount()
                 ))
                 .collect(java.util.stream.Collectors.toList());
+    }
+
+    @GetMapping("/users/{id:[0-9]+}")
+    public User getUserById(@PathVariable Long id) {
+        return userService.getById(id);
+    }
+
+    @GetMapping("/users")
+    @RequireRole(User.UserRole.ADMIN)
+    public List<User> getAllUsers() {
+        return userService.getAllUsers();
     }
 
     @PostMapping("/trusted-contacts")
