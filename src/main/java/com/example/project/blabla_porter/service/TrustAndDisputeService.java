@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
+import com.example.project.blabla_porter.dto.PendingRatingInfo;
 
 @Service
 public class TrustAndDisputeService {
@@ -186,6 +188,90 @@ public class TrustAndDisputeService {
 
     public List<Rating> getUserRatings(Long rateeUserId) {
         return ratingRepository.findByRateeUserId(rateeUserId);
+    }
+
+    public List<Rating> getRatingsSubmittedBy(Long raterUserId) {
+        return ratingRepository.findByRaterUserId(raterUserId);
+    }
+
+    public List<PendingRatingInfo> getPendingRatings(Long userId) {
+        List<PendingRatingInfo> pending = new ArrayList<>();
+
+        // 1. Check completed/delivered parcel requests
+        List<ParcelRequest> parcels = parcelRequestRepository.findAll();
+        for (ParcelRequest parcel : parcels) {
+            if (parcel.getStatus() == ParcelRequest.ParcelStatus.DELIVERED) {
+                Trip trip = tripRepository.findById(parcel.getTripId()).orElse(null);
+                if (trip == null) continue;
+
+                if (parcel.getSenderId().equals(userId)) {
+                    // Current user is Sender; counterparty is Captain (traveler)
+                    if (ratingRepository.findByRaterUserIdAndParcelRequestId(userId, parcel.getId()).isEmpty()) {
+                        User traveler = userRepository.findById(trip.getTravelerId()).orElse(null);
+                        pending.add(PendingRatingInfo.builder()
+                                .targetId(parcel.getId())
+                                .type("parcel")
+                                .description("Parcel Delivery to " + parcel.getDropoffLocation())
+                                .counterpartyId(trip.getTravelerId())
+                                .counterpartyName(traveler != null ? traveler.getFullName() : "Captain")
+                                .counterpartyRole("CAPTAIN")
+                                .build());
+                    }
+                } else if (trip.getTravelerId().equals(userId)) {
+                    // Current user is Traveler (Captain); counterparty is Sender
+                    if (ratingRepository.findByRaterUserIdAndParcelRequestId(userId, parcel.getId()).isEmpty()) {
+                        User sender = userRepository.findById(parcel.getSenderId()).orElse(null);
+                        pending.add(PendingRatingInfo.builder()
+                                .targetId(parcel.getId())
+                                .type("parcel")
+                                .description("Parcel Delivery to " + parcel.getDropoffLocation())
+                                .counterpartyId(parcel.getSenderId())
+                                .counterpartyName(sender != null ? sender.getFullName() : "Sender")
+                                .counterpartyRole("SENDER")
+                                .build());
+                    }
+                }
+            }
+        }
+
+        // 2. Check completed ride requests
+        List<RideRequest> rides = rideRequestRepository.findAll();
+        for (RideRequest ride : rides) {
+            if (ride.getStatus() == RideRequest.RideStatus.COMPLETED) {
+                Trip trip = tripRepository.findById(ride.getTripId()).orElse(null);
+                if (trip == null) continue;
+
+                if (ride.getRiderId().equals(userId)) {
+                    // Current user is Rider; counterparty is Captain (traveler)
+                    if (ratingRepository.findByRaterUserIdAndRideRequestId(userId, ride.getId()).isEmpty()) {
+                        User traveler = userRepository.findById(trip.getTravelerId()).orElse(null);
+                        pending.add(PendingRatingInfo.builder()
+                                .targetId(ride.getId())
+                                .type("ride")
+                                .description("Ride sharing to " + ride.getDropoffLocation())
+                                .counterpartyId(trip.getTravelerId())
+                                .counterpartyName(traveler != null ? traveler.getFullName() : "Captain")
+                                .counterpartyRole("CAPTAIN")
+                                .build());
+                    }
+                } else if (trip.getTravelerId().equals(userId)) {
+                    // Current user is Traveler (Captain); counterparty is Rider
+                    if (ratingRepository.findByRaterUserIdAndRideRequestId(userId, ride.getId()).isEmpty()) {
+                        User rider = userRepository.findById(ride.getRiderId()).orElse(null);
+                        pending.add(PendingRatingInfo.builder()
+                                .targetId(ride.getId())
+                                .type("ride")
+                                .description("Ride sharing to " + ride.getDropoffLocation())
+                                .counterpartyId(ride.getRiderId())
+                                .counterpartyName(rider != null ? rider.getFullName() : "Rider")
+                                .counterpartyRole("RIDER")
+                                .build());
+                    }
+                }
+            }
+        }
+
+        return pending;
     }
 
     public List<Dispute> getDisputesByStatus(Dispute.DisputeStatus status) {

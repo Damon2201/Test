@@ -263,4 +263,53 @@ public class BlaBlaPorterPhase4Tests {
         assertFalse(openDisputes.isEmpty());
         assertEquals(Dispute.DisputeStatus.OPEN, openDisputes.get(0).getStatus());
     }
+
+    @Test
+    @DisplayName("Phase 4 - Test 9: Get pending ratings returns completed but unrated transactions")
+    void test9_getPendingRatings_returnsDeliveredParcelRatings() {
+        // Set parcel status to DELIVERED
+        parcel.setStatus(ParcelRequest.ParcelStatus.DELIVERED);
+        parcelRequestRepository.save(parcel);
+
+        // Check pending ratings for sender
+        List<PendingRatingInfo> pending = trustAndDisputeService.getPendingRatings(sender.getId());
+        assertEquals(1, pending.size());
+        assertEquals("parcel", pending.get(0).getType());
+        assertEquals(parcel.getId(), pending.get(0).getTargetId());
+        assertEquals(traveler.getId(), pending.get(0).getCounterpartyId());
+
+        // Submit rating from sender to traveler
+        RatingSubmitRequest r = new RatingSubmitRequest();
+        r.setRaterUserId(sender.getId());
+        r.setRateeUserId(traveler.getId());
+        r.setParcelRequestId(parcel.getId());
+        r.setScore(5);
+        r.setReviewText("Done!");
+        trustAndDisputeService.submitRating(r);
+
+        // Pending rating list should now be empty
+        pending = trustAndDisputeService.getPendingRatings(sender.getId());
+        assertTrue(pending.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Phase 4 - Test 10: Submitting duplicate rating throws IllegalStateException")
+    void test10_submitDuplicateRating_throwsIllegalStateException() {
+        // Set parcel status to DELIVERED
+        parcel.setStatus(ParcelRequest.ParcelStatus.DELIVERED);
+        parcelRequestRepository.save(parcel);
+
+        RatingSubmitRequest r = new RatingSubmitRequest();
+        r.setRaterUserId(sender.getId());
+        r.setRateeUserId(traveler.getId());
+        r.setParcelRequestId(parcel.getId());
+        r.setScore(5);
+        r.setReviewText("Done!");
+        trustAndDisputeService.submitRating(r);
+
+        // Submitting duplicate should fail
+        assertThrows(IllegalStateException.class, () -> {
+            trustAndDisputeService.submitRating(r);
+        });
+    }
 }

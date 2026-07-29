@@ -3,6 +3,7 @@ package com.example.project.blabla_porter.controller;
 import com.example.project.blabla_porter.config.RequireRole;
 import com.example.project.blabla_porter.dto.DisputeCreateRequest;
 import com.example.project.blabla_porter.dto.RatingSubmitRequest;
+import com.example.project.blabla_porter.dto.PendingRatingInfo;
 import com.example.project.blabla_porter.model.Dispute;
 import com.example.project.blabla_porter.model.Rating;
 import com.example.project.blabla_porter.model.User;
@@ -30,6 +31,18 @@ public class TrustAndDisputeController {
     // No @RequireRole — read-only
     public List<Rating> getUserRatings(@PathVariable Long userId) {
         return trustAndDisputeService.getUserRatings(userId);
+    }
+
+    @GetMapping("/ratings/by-rater/{raterId}")
+    // No @RequireRole — read-only
+    public List<Rating> getRatingsSubmittedBy(@PathVariable Long raterId) {
+        return trustAndDisputeService.getRatingsSubmittedBy(raterId);
+    }
+
+    @GetMapping("/ratings/unrated-completed-trips/{userId}")
+    // No @RequireRole — read-only
+    public List<PendingRatingInfo> getPendingRatings(@PathVariable Long userId) {
+        return trustAndDisputeService.getPendingRatings(userId);
     }
 
     @PostMapping("/disputes")

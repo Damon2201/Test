@@ -113,6 +113,7 @@ let selectedRideForTracking = null;
 let selectedParcelForRating = null;
 let selectedRideForRating = null;
 let modalRateeId = null;
+let pendingRatings = [];
 let riderActiveSubTab = 'carpool';
 let currentCustomerTab = ''; // 'parcel', 'carpool', 'taxi', 'profile'
 let currentLocalTaxiQuote = null;
@@ -488,7 +489,23 @@ document.addEventListener('DOMContentLoaded', () => {
     registerFcmDeviceTokenMock();
     renderApp();
     refreshUserKycStatus();
+    fetchPendingRatings();
 });
+
+async function fetchPendingRatings() {
+    if (!currentUser || !currentUser.id || !currentUser.token) return;
+    try {
+        const res = await fetch(`${API_BASE}/governance/ratings/unrated-completed-trips/${currentUser.id}`, {
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            pendingRatings = await res.json();
+            renderApp();
+        }
+    } catch (e) {
+        console.error("Failed to fetch pending ratings:", e);
+    }
+}
 
 async function refreshUserKycStatus() {
     if (!currentUser || !currentUser.id || !currentUser.token) return;
@@ -607,7 +624,7 @@ function renderApp() {
                         <div class="user-avatar">${currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : 'U'}</div>
                         <div class="user-details">
                             <span class="user-name">${escapeHtml(currentUser.fullName)}</span>
-                            <span class="user-role-badge">${currentUser.role === 'TRAVELER' ? 'CAPTAIN' : currentUser.role} ⭐ ${currentUser.averageRating ? currentUser.averageRating.toFixed(1) : '5.0'} (Sign Out)</span>
+                            <span class="user-role-badge">${currentUser.role === 'TRAVELER' ? 'CAPTAIN' : currentUser.role} ⭐ ${currentUser.totalRatingsCount && currentUser.totalRatingsCount > 0 ? (currentUser.averageRating ? currentUser.averageRating.toFixed(1) : '5.0') : 'New'} (Sign Out)</span>
                         </div>
                     </div>
                 ` : `
@@ -752,9 +769,39 @@ function renderApp() {
         }
     }
 
+    let unratedBannerHtml = '';
+    if (currentUser && currentUser.role !== 'ADMIN' && pendingRatings && pendingRatings.length > 0) {
+        unratedBannerHtml = `
+            <div class="pending-ratings-banner" style="background: rgba(245, 158, 11, 0.15); border: 1px solid var(--warning); border-radius: 12px; padding: 16px; margin: 16px 24px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 20px;">⚠️</span>
+                        <div style="font-size: 13px; font-weight: 700; color: var(--text-white);">
+                            You have ${pendingRatings.length} trip${pendingRatings.length > 1 ? 's' : ''} awaiting your rating!
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${pendingRatings.map(pr => `
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 0, 0, 0.2); padding: 8px 12px; border-radius: 8px; font-size: 12px;">
+                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                <span style="font-weight: 700; color: var(--warning);">${escapeHtml(pr.description)}</span>
+                                <span style="color: var(--text-muted);">Rate ${pr.counterpartyRole.toLowerCase()}: <b>${escapeHtml(pr.counterpartyName)}</b></span>
+                            </div>
+                            <button class="btn-book" style="background: var(--warning); color: black; font-weight: 700; padding: 4px 10px; font-size: 11px; border-radius: 6px; border: none; margin: 0; min-height: unset; cursor: pointer; height: auto; width: auto;" onclick="openRatingModal(${pr.type === 'parcel' ? pr.targetId : 'null'}, ${pr.type === 'ride' ? pr.targetId : 'null'}, ${pr.counterpartyId}, '${pr.type}')">
+                                ⭐ Rate Now
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     root.innerHTML = `
         ${headerHtml}
         <main class="main-wrapper" style="${currentUser && currentUser.role !== 'ADMIN' ? 'padding-bottom: 80px;' : ''}">
+            ${unratedBannerHtml}
             ${mainContentHtml}
         </main>
         ${navBarHtml}
@@ -2452,6 +2499,7 @@ function bindPostRenderListeners() {
                 initWebSocket();
                 registerFcmDeviceTokenMock();
                 activeModal = null;
+                fetchPendingRatings();
                 renderApp();
                 showToast(`Authenticated! Logged in as ${currentUser.fullName} (${currentUser.role === 'TRAVELER' ? 'CAPTAIN' : currentUser.role}).`, 'success');
             } catch (err) {
@@ -2768,13 +2816,19 @@ async function fetchTripsForSender() {
             const driverName = getUserName(trip.travelerId);
             const avatarChar = driverName.charAt(0).toUpperCase();
             const isPassengerTrip = trip.travelMode && trip.travelMode !== 'DRIVING';
+            
+            const traveler = usersCache.find(x => x.id === trip.travelerId);
+            const ratingText = traveler && traveler.totalRatingsCount > 0 ? 
+                `⭐ ${traveler.averageRating ? traveler.averageRating.toFixed(1) : '5.0'} (${traveler.totalRatingsCount} reviews)` : 
+                `⭐ New`;
+
             card.innerHTML = `
                 <div class="card-top">
                     <div class="driver-profile">
                         <div class="driver-avatar">${escapeHtml(avatarChar)}</div>
                         <div class="driver-info">
                             <span class="driver-name">${escapeHtml(driverName)}</span>
-                            <span class="driver-meta">⭐ 5.0 Rating • ${isPassengerTrip ? 'Passenger Courier' : 'Verified Driver'}</span>
+                            <span class="driver-meta">${ratingText} • ${isPassengerTrip ? 'Passenger Courier' : 'Verified Driver'}</span>
                         </div>
                     </div>
                     <span class="verified-badge">${escapeHtml(trip.status)}</span>
@@ -4073,6 +4127,11 @@ function renderFilteredRiderTrips() {
         const driverName = getUserName(t.travelerId);
         const avatarChar = driverName.charAt(0).toUpperCase();
 
+        const traveler = usersCache.find(x => x.id === t.travelerId);
+        const ratingText = traveler && traveler.totalRatingsCount > 0 ? 
+            `⭐ ${traveler.averageRating ? traveler.averageRating.toFixed(1) : '5.0'} (${traveler.totalRatingsCount} reviews)` : 
+            `⭐ New`;
+
         let distance = 300.0;
         const src = t.source.toLowerCase();
         const dest = t.destination.toLowerCase();
@@ -4097,7 +4156,7 @@ function renderFilteredRiderTrips() {
                     <div class="driver-avatar">${escapeHtml(avatarChar)}</div>
                     <div class="driver-info">
                         <span class="driver-name">${escapeHtml(driverName)}</span>
-                        <span class="driver-meta">⭐ 4.9 Rating • Verified Captain</span>
+                        <span class="driver-meta">${ratingText} • Verified Captain</span>
                     </div>
                 </div>
                 <span class="verified-badge">${escapeHtml(t.status)}</span>
@@ -5834,7 +5893,11 @@ function renderCustomerProfile() {
                         <div>
                             <h2 style="font-size:22px; font-weight:800; color:var(--text-white); margin-bottom:4px;">${escapeHtml(currentUser.fullName)}</h2>
                             <span class="user-role-badge" style="background:rgba(99,102,241,0.2); color:var(--primary); font-size:12px; font-weight:700; padding:4px 8px; border-radius:6px; border: 1px solid rgba(99,102,241,0.3);">${capsDisplay}</span>
-                            <div style="font-size:12px; color:var(--warning); margin-top:6px; font-weight:700;">⭐ ${currentUser.averageRating ? currentUser.averageRating.toFixed(1) : '5.0'} (${currentUser.totalRatingsCount || 0} reviews)</div>
+                            <div style="font-size:12px; color:var(--warning); margin-top:6px; font-weight:700;">
+                                ${currentUser.totalRatingsCount && currentUser.totalRatingsCount > 0 ? 
+                                    `⭐ ${currentUser.averageRating ? currentUser.averageRating.toFixed(1) : '5.0'} (${currentUser.totalRatingsCount} reviews)` : 
+                                    `⭐ No ratings yet`}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -6084,6 +6147,7 @@ window.submitTripRating = async function(event, targetId, rateeId, isParcel) {
                 currentUser.totalRatingsCount = updatedUser.totalRatingsCount;
                 localStorage.setItem('currentUser', JSON.stringify(currentUser));
             }
+            fetchPendingRatings();
             renderApp();
             if (isParcel) {
                 if (currentUser.role === 'TRAVELER') {
